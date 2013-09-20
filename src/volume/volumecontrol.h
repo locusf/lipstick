@@ -23,6 +23,7 @@
 class HomeWindow;
 class PulseAudioControl;
 class VolumeKeyListener;
+class MGConfItem;
 
 namespace ResourcePolicy {
     class ResourceSet;
@@ -42,6 +43,7 @@ class LIPSTICK_EXPORT VolumeControl : public QObject
     Q_PROPERTY(int volume READ volume NOTIFY volumeChanged)
     Q_PROPERTY(int maximumVolume READ maximumVolume NOTIFY maximumVolumeChanged)
     Q_PROPERTY(bool windowVisible READ windowVisible WRITE setWindowVisible NOTIFY windowVisibleChanged)
+    Q_PROPERTY(bool showVolumeWarning READ showVolumeWarning WRITE setShowVolumeWarning NOTIFY showVolumeWarningChanged)
 
 public:
     /*!
@@ -91,6 +93,20 @@ public:
      */
     void setWindowVisible(bool visible);
 
+    /*!
+     * Returns whether the high volume should be show to user.
+     *
+     * \return \c true if warning should be shown \c false otherwise
+     */
+    bool showVolumeWarning() const;
+
+    /*!
+     * Sets the visibility of the high volume warning.
+     *
+     * \param showWarning \c true if the warning should be shown, \c false is user want's to suppress it for ever
+     */
+    void setShowVolumeWarning(bool showWarning);
+
     //! \reimp
     virtual bool eventFilter(QObject *watched, QEvent *event);
     //! \reimp_end
@@ -108,6 +124,23 @@ signals:
     //! Sent when the visibility of the volume window has changed.
     void windowVisibleChanged();
 
+    //! Sent when the visibility of the high volume warning.
+    void showVolumeWarningChanged();
+
+    /*!
+     * Sent when main volume is set to so high that it can hurt hearing
+     *
+     * \param safeLevel Highest level for volumume that does not risk hurting hearing
+     */
+    void highVolume(int safeLevel);
+
+    /*!
+     * Sent when user needs to be warned about long listening time.
+     *
+     * \param listeningTime listening time in minutes
+     */
+    void longListeningTime(int listeningTime);
+
 public slots:
     //! Acquires access to hardware keys
     void acquireKeys();
@@ -116,11 +149,8 @@ public slots:
     void releaseKeys();
 
 private slots:
-    //! Sets the volume
-    void setVolume(int volume);
-
-    //! Sets the maximum volume
-    void setMaximumVolume(int maximumVolume);
+    //! Sets the volume and maximum volume
+    void setVolume(int volume, int maximumVolume);
 
     //! An internal slot to handle the case when we got the hardware volume keys resource
     void hwKeyResourceAcquired();
@@ -164,6 +194,9 @@ private:
 
     //! Timer for the key repeat
     QTimer keyRepeatTimer;
+
+    //! Stores high volume warning visibility
+    MGConfItem *volumeWarning;
 
 #ifdef UNIT_TEST
     friend class Ut_VolumeControl;

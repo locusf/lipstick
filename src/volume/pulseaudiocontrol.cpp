@@ -39,7 +39,7 @@ PulseAudioControl::PulseAudioControl(QObject *parent) :
 PulseAudioControl::~PulseAudioControl()
 {
     if (dbusConnection != NULL) {
-        dbus_connection_remove_filter(dbusConnection, PulseAudioControl::stepsUpdatedSignalHandler, (void *)this);
+        dbus_connection_remove_filter(dbusConnection, PulseAudioControl::signalHandler, (void *)this);
         dbus_connection_unref(dbusConnection);
     }
 }
@@ -75,7 +75,7 @@ void PulseAudioControl::openConnection()
 
     if (dbusConnection != NULL) {
         dbus_connection_setup_with_g_main(dbusConnection, NULL);
-        dbus_connection_add_filter(dbusConnection, PulseAudioControl::stepsUpdatedSignalHandler, (void *)this, NULL);
+        dbus_connection_add_filter(dbusConnection, PulseAudioControl::signalHandler, (void *)this, NULL);
 
         addSignalMatch();
     }
@@ -156,41 +156,56 @@ void PulseAudioControl::update()
 
 void PulseAudioControl::addSignalMatch()
 {
-    DBusMessage *message = dbus_message_new_method_call(NULL, "/org/pulseaudio/core1", NULL, "ListenForSignal");
-    if (message != NULL) {
-        static const char *signal = "com.Nokia.MainVolume1.StepsUpdated";
-        char **emptyarray = { NULL };
-
-        dbus_message_append_args(message, DBUS_TYPE_STRING, &signal, DBUS_TYPE_ARRAY, DBUS_TYPE_OBJECT_PATH, &emptyarray, 0, DBUS_TYPE_INVALID);
-        dbus_connection_send(dbusConnection, message, NULL);
-        dbus_message_unref(message);
+    static const char *singnals []  = {"com.Nokia.MainVolume1.StepsUpdated", "com.Nokia.MainVolume1.NotifyHighVolume", "com.Nokia.MainVolume1.NotifyListeningTime"};
+    for (int index = 0; index < 3; ++index) {
+        DBusMessage *message = dbus_message_new_method_call(NULL, "/org/pulseaudio/core1", NULL, "ListenForSignal");
+        if (message != NULL) {
+            const char *signalPtr = singnals[index];
+            char **emptyarray = { NULL };
+            dbus_message_append_args(message, DBUS_TYPE_STRING, &signalPtr, DBUS_TYPE_ARRAY, DBUS_TYPE_OBJECT_PATH, &emptyarray, 0, DBUS_TYPE_INVALID);
+            dbus_connection_send(dbusConnection, message, NULL);
+            dbus_message_unref(message);
+        }
     }
 }
 
-DBusHandlerResult PulseAudioControl::stepsUpdatedSignalHandler(DBusConnection *, DBusMessage *message, void *control)
+DBusHandlerResult PulseAudioControl::signalHandler(DBusConnection *, DBusMessage *message, void *control)
 {
-    if (message && dbus_message_has_member(message, "StepsUpdated")) {
-        DBusError error;
+    if(!message)
+        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+    DBusError error;
+    dbus_error_init(&error);
+
+    if (dbus_message_has_member(message, "StepsUpdated")) {
         quint32 currentStep = 0;
         quint32 stepCount = 0;
-
-        dbus_error_init(&error);
 
         if (dbus_message_get_args(message, &error, DBUS_TYPE_UINT32, &stepCount, DBUS_TYPE_UINT32, &currentStep, DBUS_TYPE_INVALID)) {
             static_cast<PulseAudioControl*>(control)->setSteps(currentStep, stepCount);
         }
+    } else if (dbus_message_has_member(message, "NotifyHighVolume")) {
+        quint32 highestSafeVolume = 0;
 
-        DBUS_ERR_CHECK (error);
+        if (dbus_message_get_args(message, &error, DBUS_TYPE_UINT32, &highestSafeVolume, DBUS_TYPE_INVALID)) {
+            static_cast<PulseAudioControl*>(control)->highVolume(highestSafeVolume);
+        }
+    } else if (dbus_message_has_member(message, "NotifyListeningTime")) {
+        quint32 listeningTime = 0;
+
+        if (dbus_message_get_args(message, &error, DBUS_TYPE_UINT32, &listeningTime, DBUS_TYPE_INVALID)) {
+            static_cast<PulseAudioControl*>(control)->longListeningTime(listeningTime);
+        }
     }
 
+    DBUS_ERR_CHECK (error);
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
 void PulseAudioControl::setSteps(quint32 currentStep, quint32 stepCount)
 {
     // The pulseaudio API reports the step count (starting from 0), so the maximum volume is stepCount - 1
-    emit maximumVolumeSet(stepCount - 1);
-    emit currentVolumeSet(currentStep);
+    emit volumeChanged(currentStep, stepCount - 1);
 }
 
 void PulseAudioControl::setVolume(int volume)

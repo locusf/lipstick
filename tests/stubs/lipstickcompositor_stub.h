@@ -28,19 +28,24 @@ class LipstickCompositorStub : public StubBase {
   virtual QObject * windowForId(int) const;
   virtual void closeClientForWindowId(int);
   virtual void clearKeyboardFocus();
-  virtual void displayOff();
+  virtual void setDisplayOff();
   virtual LipstickCompositorProcWindow * mapProcWindow(const QString &title, const QString &category, const QRect &);
   virtual QWaylandSurface * surfaceForId(int) const;
+  virtual bool event(QEvent *);
   virtual void surfaceAboutToBeDestroyed(QWaylandSurface *surface);
+  virtual void clearUpdateRequest();
+  virtual void maybePostUpdateRequest();
   virtual void surfaceMapped();
   virtual void surfaceUnmapped();
   virtual void surfaceSizeChanged();
   virtual void surfaceTitleChanged();
   virtual void surfaceRaised();
   virtual void surfaceLowered();
+  virtual void surfaceDamaged(const QRect &);
   virtual void windowSwapped();
   virtual void windowDestroyed();
   virtual void windowPropertyChanged(const QString &);
+  virtual void reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState);
 }; 
 
 // 2. IMPLEMENT STUB
@@ -143,8 +148,8 @@ void LipstickCompositorStub::clearKeyboardFocus() {
   stubMethodEntered("clearKeyboardFocus");
 }
 
-void LipstickCompositorStub::displayOff() {
-  stubMethodEntered("displayOff");
+void LipstickCompositorStub::setDisplayOff() {
+  stubMethodEntered("setDisplayOff");
 }
 
 LipstickCompositorProcWindow * LipstickCompositorStub::mapProcWindow(const QString &title, const QString &category, const QRect &rect) {
@@ -163,10 +168,25 @@ QWaylandSurface * LipstickCompositorStub::surfaceForId(int id) const {
   return stubReturnValue<QWaylandSurface *>("surfaceForId");
 }
 
+bool LipstickCompositorStub::event(QEvent *e) {
+  QList<ParameterBase*> params;
+  params.append( new Parameter<QEvent * >(e));
+  stubMethodEntered("event",params);
+  return stubReturnValue<QEvent *>("event");
+}
+
 void LipstickCompositorStub::surfaceAboutToBeDestroyed(QWaylandSurface *surface) {
   QList<ParameterBase*> params;
   params.append( new Parameter<QWaylandSurface * >(surface));
   stubMethodEntered("surfaceAboutToBeDestroyed",params);
+}
+
+void LipstickCompositorStub::clearUpdateRequest() {
+  stubMethodEntered("clearUpdateRequest");
+}
+
+void LipstickCompositorStub::maybePostUpdateRequest() {
+  stubMethodEntered("maybePostUpdateRequest");
 }
 
 void LipstickCompositorStub::surfaceMapped() {
@@ -193,6 +213,12 @@ void LipstickCompositorStub::surfaceLowered() {
   stubMethodEntered("surfaceLowered");
 }
 
+void LipstickCompositorStub::surfaceDamaged(const QRect &rect) {
+    QList<ParameterBase*> params;
+    params.append( new Parameter<QRect>(rect));
+    stubMethodEntered("surfaceDamaged",params);
+}
+
 void LipstickCompositorStub::windowSwapped() {
   stubMethodEntered("windowSwapped");
 }
@@ -205,6 +231,12 @@ void LipstickCompositorStub::windowPropertyChanged(const QString &property) {
   QList<ParameterBase*> params;
   params.append( new Parameter<const QString & >(property));
   stubMethodEntered("windowPropertyChanged",params);
+}
+
+void LipstickCompositorStub::reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState state) {
+  QList<ParameterBase*> params;
+  params.append( new Parameter<MeeGo::QmDisplayState::DisplayState >(state));
+  stubMethodEntered("reactOnDisplayStateChanges",params);
 }
 
 
@@ -291,8 +323,8 @@ void LipstickCompositor::clearKeyboardFocus() {
   gLipstickCompositorStub->clearKeyboardFocus();
 }
 
-void LipstickCompositor::displayOff() {
-  gLipstickCompositorStub->displayOff();
+void LipstickCompositor::setDisplayOff() {
+  gLipstickCompositorStub->setDisplayOff();
 }
 
 LipstickCompositorProcWindow * LipstickCompositor::mapProcWindow(const QString &title, const QString &category, const QRect &rect) {
@@ -303,8 +335,20 @@ QWaylandSurface * LipstickCompositor::surfaceForId(int id) const {
   return gLipstickCompositorStub->surfaceForId(id);
 }
 
+bool LipstickCompositor::event(QEvent *e) {
+    return gLipstickCompositorStub->event(e);
+}
+
 void LipstickCompositor::surfaceAboutToBeDestroyed(QWaylandSurface *surface) {
   gLipstickCompositorStub->surfaceAboutToBeDestroyed(surface);
+}
+
+void LipstickCompositor::clearUpdateRequest() {
+    gLipstickCompositorStub->clearUpdateRequest();
+}
+
+void LipstickCompositor::maybePostUpdateRequest() {
+    gLipstickCompositorStub->maybePostUpdateRequest();
 }
 
 void LipstickCompositor::surfaceMapped() {
@@ -331,6 +375,10 @@ void LipstickCompositor::surfaceLowered() {
   gLipstickCompositorStub->surfaceLowered();
 }
 
+void LipstickCompositor::surfaceDamaged(const QRect &rect) {
+  gLipstickCompositorStub->surfaceDamaged(rect);
+}
+
 void LipstickCompositor::windowSwapped() {
   gLipstickCompositorStub->windowSwapped();
 }
@@ -341,6 +389,10 @@ void LipstickCompositor::windowDestroyed() {
 
 void LipstickCompositor::windowPropertyChanged(const QString &property) {
   gLipstickCompositorStub->windowPropertyChanged(property);
+}
+
+void LipstickCompositor::reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState state) {
+  gLipstickCompositorStub->reactOnDisplayStateChanges(state);
 }
 
 QWaylandCompositor::QWaylandCompositor(QWindow *, const char *)

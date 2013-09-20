@@ -17,7 +17,6 @@
 #include <contentaction.h>
 #endif
 
-#include <qmdisplaystate.h>
 #include <QWaylandInputDevice>
 #include <QDesktopServices>
 #include "homeapplication.h"
@@ -37,6 +36,8 @@ LipstickCompositor::LipstickCompositor()
     m_instance = this;
 
     QObject::connect(this, SIGNAL(frameSwapped()), this, SLOT(windowSwapped()));
+    QObject::connect(this, SIGNAL(beforeSynchronizing()), this, SLOT(clearUpdateRequest()));
+    connect(m_displayState, SIGNAL(displayStateChanged(MeeGo::QmDisplayState::DisplayState)), this, SLOT(reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState)));
 
     emit HomeApplication::instance()->homeActiveChanged();
 
@@ -74,6 +75,7 @@ void LipstickCompositor::surfaceCreated(QWaylandSurface *surface)
     connect(surface, SIGNAL(windowPropertyChanged(QString,QVariant)), this, SLOT(windowPropertyChanged(QString)));
     connect(surface, SIGNAL(raiseRequested()), this, SLOT(surfaceRaised()));
     connect(surface, SIGNAL(lowerRequested()), this, SLOT(surfaceLowered()));
+    connect(surface, SIGNAL(damaged(QRect)), this, SLOT(surfaceDamaged(QRect)));
 }
 
 void LipstickCompositor::openUrl(WaylandClient *client, const QUrl &url)
@@ -85,7 +87,11 @@ void LipstickCompositor::openUrl(WaylandClient *client, const QUrl &url)
 void LipstickCompositor::openUrl(const QUrl &url)
 {
 #if defined(HAVE_CONTENTACTION)
-    ContentAction::Action::defaultActionForScheme(url.toString()).trigger();
+    if (url.scheme() == "file") {
+        ContentAction::Action::defaultActionForFile(url.toString()).trigger();
+    } else {
+        ContentAction::Action::defaultActionForScheme(url.toString()).trigger();
+    }
 #else
     Q_UNUSED(url)
 #endif
@@ -168,9 +174,18 @@ void LipstickCompositor::clearKeyboardFocus()
     defaultInputDevice()->setKeyboardFocus(0);
 }
 
-void LipstickCompositor::displayOff()
+void LipstickCompositor::setDisplayOff()
 {
     m_displayState->set(MeeGo::QmDisplayState::Off);
+}
+
+void LipstickCompositor::surfaceDamaged(const QRect &)
+{
+    if (!isVisible()) {
+        // If the compositor is not visible, do not throttle.
+        // make it conditional to QT_WAYLAND_COMPOSITOR_NO_THROTTLE?
+        frameFinished(0);
+    }
 }
 
 void LipstickCompositor::setFullscreenSurface(QWaylandSurface *surface)
@@ -233,6 +248,19 @@ void LipstickCompositor::surfaceAboutToBeDestroyed(QWaylandSurface *surface)
     }
 }
 
+void LipstickCompositor::clearUpdateRequest()
+{
+    // Called from render thread
+    m_updateRequestPosted.store(0);
+}
+
+void LipstickCompositor::maybePostUpdateRequest()
+{
+    // Called from GUI thread
+    if (m_updateRequestPosted.testAndSetOrdered(0, 1))
+        qApp->postEvent(this, new QEvent(QEvent::User));
+}
+
 void LipstickCompositor::surfaceMapped()
 {
     QWaylandSurface *surface = qobject_cast<QWaylandSurface *>(sender());
@@ -243,14 +271,20 @@ void LipstickCompositor::surfaceMapped()
     QVariantMap properties = surface->windowProperties();
     QString category = properties.value("CATEGORY").toString();
 
-    if (surface->surfaceItem())
+    if (surface->surfaceItem()) {
+        // Always cause a repaint on surface mapped
+        maybePostUpdateRequest();
         return;
+    }
 
     // The surface was mapped for the first time
     int id = m_nextWindowId++;
     LipstickCompositorWindow *item = new LipstickCompositorWindow(id, category, surface, contentItem());
     item->setSize(surface->size());
     QObject::connect(item, SIGNAL(destroyed(QObject*)), this, SLOT(windowDestroyed()));
+
+    // Whenever the item is damaged, cause a full repaint
+    QObject::connect(item, SIGNAL(textureChanged()), this, SLOT(maybePostUpdateRequest()));
     m_totalWindowCount++;
     m_mappedSurfaces.insert(id, item);
 
@@ -344,8 +378,12 @@ void LipstickCompositor::surfaceUnmapped(QWaylandSurface *surface)
         setFullscreenSurface(0);
 
     LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
-    if (window)
+    if (window) {
         emit windowHidden(window);
+
+        // Always schedule an update
+        maybePostUpdateRequest();
+    }
 }
 
 void LipstickCompositor::surfaceUnmapped(LipstickCompositorProcWindow *item)
@@ -381,6 +419,17 @@ void LipstickCompositor::windowRemoved(int id)
         m_windowModels.at(ii)->remItem(id);
 }
 
+bool LipstickCompositor::event(QEvent *e)
+{
+    // Update will eventually trigger a beforeSynchronizing signal,
+    // clear the m_updateRequest there (what happens after synchronizing,
+    // needs to be updated)
+    if (e->type() == QEvent::User)
+        update();
+
+    return QQuickWindow::event(e);
+}
+
 QQmlComponent *LipstickCompositor::shaderEffectComponent()
 {
     const char *qml_source =
@@ -404,5 +453,12 @@ void LipstickCompositor::setScreenOrientation(Qt::ScreenOrientation screenOrient
 
         m_screenOrientation = screenOrientation;
         emit screenOrientationChanged();
+    }
+}
+
+void LipstickCompositor::reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState state)
+{
+    if (state == MeeGo::QmDisplayState::On) {
+        emit displayOn();
     }
 }

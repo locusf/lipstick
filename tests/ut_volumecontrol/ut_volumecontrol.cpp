@@ -20,6 +20,7 @@
 #include "volumecontrol.h"
 #include "pulseaudiocontrol_stub.h"
 #include "closeeventeater_stub.h"
+#include "mgconfitem_stub.h"
 
 extern "C"
 {
@@ -116,8 +117,7 @@ void Ut_VolumeControl::init()
     gPulseAudioControlStub->stubReset();
 
     volumeControl = new VolumeControl;
-    volumeControl->setMaximumVolume(10);
-    volumeControl->setVolume(5);
+    volumeControl->setVolume(5, 10);
 }
 
 void Ut_VolumeControl::cleanup()
@@ -133,8 +133,7 @@ void Ut_VolumeControl::cleanup()
 void Ut_VolumeControl::testConnections()
 {
     // Check that pulse audio and the volume bar are connected
-    QCOMPARE(disconnect(volumeControl->pulseAudioControl, SIGNAL(currentVolumeSet(int)), volumeControl, SLOT(setVolume(int))), true);
-    QCOMPARE(disconnect(volumeControl->pulseAudioControl, SIGNAL(maximumVolumeSet(int)), volumeControl, SLOT(setMaximumVolume(int))), true);
+    QCOMPARE(disconnect(volumeControl->pulseAudioControl, SIGNAL(volumeChanged(int,int)), volumeControl, SLOT(setVolume(int,int))), true);
 }
 
 void Ut_VolumeControl::testKeyRepeatSetup()

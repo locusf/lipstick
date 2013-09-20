@@ -37,25 +37,32 @@ public:
 
     /*!
      * Queries the PulseAudio daemon for the volume levels (current and maximum).
-     * If successful, maximumVolumeSet and currentVolumeSet signals will be
-     * emitted.
+     * If successful, volumeChanged signal will be emitted.
      */
     void update();
 
 signals:
     /*!
-     * Sent when the current volume level has changed.
+     * Sent when the current or maximum volume has changed.
      *
      * \param level The new volume level
+     * \param maximum The maximum volume level
      */
-    void currentVolumeSet(int level);
+    void volumeChanged(int volume, int maximum);
 
     /*!
-     * Sent when the maximum volume level has changed.
+     * Sent when main volume is set to so high that it can hurt hearing
      *
-     * \param level The new maximum volume level
+     * \param safeLevel Highest level for volume that does not risk hurting hearing
      */
-    void maximumVolumeSet(int level);
+    void highVolume(int safeLevel);
+
+    /*!
+     * Sent when user needs to be warned about long listening time.
+     *
+     * \param listeningTime listening time in minutes
+     */
+    void longListeningTime(int listeningTime);
 
 public slots:
     /*!
@@ -87,7 +94,7 @@ private:
      * \param message signal message
      * \param control PulseAudioControl instance handling this signal
      */
-    static DBusHandlerResult stepsUpdatedSignalHandler(DBusConnection *conn, DBusMessage *message, void *control);
+    static DBusHandlerResult signalHandler(DBusConnection *conn, DBusMessage *message, void *control);
 
     //! D-Bus connection structure
     DBusConnection *dbusConnection;

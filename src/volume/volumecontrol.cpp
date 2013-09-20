@@ -21,6 +21,7 @@
 #include <QQmlContext>
 #include <QScreen>
 #include <QKeyEvent>
+#include <MGConfItem>
 #include "utilities/closeeventeater.h"
 #include "pulseaudiocontrol.h"
 #include "volumecontrol.h"
@@ -32,7 +33,8 @@ VolumeControl::VolumeControl(QObject *parent) :
     hwKeyResource(new ResourcePolicy::ResourceSet("event")),
     hwKeysAcquired(false),
     volume_(0),
-    maximumVolume_(0)
+    maximumVolume_(0),
+    volumeWarning(new MGConfItem("/desktop/nemo/volumewarning", this))
 {
     hwKeyResource->setAlwaysReply();
     hwKeyResource->addResourceObject(new ResourcePolicy::ScaleButtonResource);
@@ -49,8 +51,9 @@ VolumeControl::VolumeControl(QObject *parent) :
     connect(&keyRepeatDelayTimer, SIGNAL(timeout()), &keyRepeatTimer, SLOT(start()));
     connect(&keyRepeatTimer, SIGNAL(timeout()), this, SLOT(changeVolume()));
 
-    connect(pulseAudioControl, SIGNAL(currentVolumeSet(int)), this, SLOT(setVolume(int)));
-    connect(pulseAudioControl, SIGNAL(maximumVolumeSet(int)), this, SLOT(setMaximumVolume(int)));
+    connect(pulseAudioControl, SIGNAL(volumeChanged(int,int)), this, SLOT(setVolume(int,int)));
+    connect(pulseAudioControl, SIGNAL(highVolume(int)), SIGNAL(highVolume(int)));
+    connect(pulseAudioControl, SIGNAL(longListeningTime(int)), SIGNAL(longListeningTime(int)));
     pulseAudioControl->update();
 
     qApp->installEventFilter(this);
@@ -103,19 +106,44 @@ bool VolumeControl::windowVisible() const
     return window != 0 && window->isVisible();
 }
 
-void VolumeControl::setVolume(int volume)
+bool VolumeControl::showVolumeWarning() const
 {
-    if (volume_ != volume) {
-        volume_ = volume;
-        emit volumeChanged();
-    }
+    return volumeWarning->value(true).toBool();
 }
 
-void VolumeControl::setMaximumVolume(int maximumVolume)
+void VolumeControl::setShowVolumeWarning(bool showWarning)
 {
-    if (maximumVolume_ != maximumVolume) {
-        maximumVolume_ = maximumVolume;
+    if (volumeWarning->value(true).toBool() == showWarning)
+        return;
+
+    volumeWarning->set(showWarning);
+    emit showVolumeWarningChanged();
+}
+
+void VolumeControl::setVolume(int volume, int maximumVolume)
+{
+    int clampedMaxVolume = maximumVolume < 0 ? 0 : maximumVolume;
+    int clampedVolume = qBound(0, volume, maximumVolume);
+
+    bool volumeUpdated = false;
+    bool maxVolumeUpdated = false;
+
+    if (maximumVolume_ != clampedMaxVolume) {
+        maximumVolume_ = clampedMaxVolume;
+        maxVolumeUpdated = true;
+    }
+
+    if (volume_ != clampedVolume) {
+        volume_ = clampedVolume;
+        volumeUpdated = true;
+    }
+
+    if (maxVolumeUpdated) {
         emit maximumVolumeChanged();
+    }
+
+    if (volumeUpdated) {
+        emit volumeChanged();
     }
 }
 

@@ -21,14 +21,11 @@
 #include <QQmlParserStatus>
 #include <QWaylandCompositor>
 #include <QWaylandSurfaceItem>
+#include <qmdisplaystate.h>
 
 class WindowModel;
 class LipstickCompositorWindow;
 class LipstickCompositorProcWindow;
-
-namespace MeeGo {
-    class QmDisplayState;
-}
 
 class LIPSTICK_EXPORT LipstickCompositor : public QQuickWindow, public QWaylandCompositor,
                                            public QQmlParserStatus
@@ -77,7 +74,7 @@ public:
     Q_INVOKABLE QObject *windowForId(int) const;
     Q_INVOKABLE void closeClientForWindowId(int);
     Q_INVOKABLE void clearKeyboardFocus();
-    Q_INVOKABLE void displayOff();
+    Q_INVOKABLE void setDisplayOff();
 
     LipstickCompositorProcWindow *mapProcWindow(const QString &title, const QString &category, const QRect &);
 
@@ -101,20 +98,27 @@ signals:
     void topmostWindowIdChanged();
     void screenOrientationChanged();
 
+    void displayOn();
+
 protected:
-     virtual void surfaceAboutToBeDestroyed(QWaylandSurface *surface);
+    virtual bool event(QEvent *);
+    virtual void surfaceAboutToBeDestroyed(QWaylandSurface *surface);
 
 private slots:
+    void clearUpdateRequest();
+    void maybePostUpdateRequest();
     void surfaceMapped();
     void surfaceUnmapped();
     void surfaceSizeChanged();
     void surfaceTitleChanged();
     void surfaceRaised();
     void surfaceLowered();
+    void surfaceDamaged(const QRect &);
     void windowSwapped();
     void windowDestroyed();
     void windowPropertyChanged(const QString &);
     void openUrl(const QUrl &);
+    void reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState state);
 
 private:
     friend class LipstickCompositorWindow;
@@ -150,6 +154,7 @@ private:
     int m_topmostWindowId;
     Qt::ScreenOrientation m_screenOrientation;
     MeeGo::QmDisplayState *m_displayState;
+    QAtomicInt m_updateRequestPosted;
 };
 
 #endif // LIPSTICKCOMPOSITOR_H
