@@ -29,16 +29,11 @@
 
 #include "launcheritem.h"
 
-// Define this if you'd like to see debug messages from the launcher
-#ifdef DEBUG_LAUNCHER
-#define LAUNCHER_DEBUG(things) qDebug() << Q_FUNC_INFO << things
-#else
-#define LAUNCHER_DEBUG(things)
-#endif
-
 LauncherItem::LauncherItem(const QString &filePath, QObject *parent)
     : QObject(parent)
     , _isLaunching(false)
+    , _customIconFilename("")
+    , _serial(0)
 {
     if (!filePath.isEmpty()) {
         setFilePath(filePath);
@@ -85,7 +80,11 @@ QString LauncherItem::entryType() const
 
 QString LauncherItem::iconId() const
 {
-    return !_desktopEntry.isNull() ? _desktopEntry->icon() : QString();
+    if (!_customIconFilename.isEmpty()) {
+        return QString("%1#serial=%2").arg(_customIconFilename).arg(_serial);
+    }
+
+    return getOriginalIconId();
 }
 
 QStringList LauncherItem::desktopCategories() const
@@ -113,12 +112,12 @@ bool LauncherItem::isLaunching() const
     return _isLaunching;
 }
 
-void LauncherItem::disableIsLaunching()
+void LauncherItem::setIsLaunching(bool isLaunching)
 {
-    if (!_isLaunching)
-        return; // prevent spurious signals from all delegates
-    _isLaunching = false;
-    emit this->isLaunchingChanged();
+    if (_isLaunching != isLaunching) {
+        _isLaunching = isLaunching;
+        emit this->isLaunchingChanged();
+    }
 }
 
 void LauncherItem::launchApplication()
@@ -152,17 +151,32 @@ void LauncherItem::launchApplication()
     QProcess::startDetached(commandText);
 #endif
 
-    _isLaunching = true;
-    emit this->isLaunchingChanged();
+    setIsLaunching(true);
 
-    // TODO: instead of this, match the PID of the window thumbnails with the launcher processes
-    // Launching animation will stop after 5 seconds
-    QTimer::singleShot(5000, this, SLOT(disableIsLaunching()));
+    // This is a failsafe to allow launching again after 5 seconds in case the application crashes on startup and no window is ever created
+    QTimer::singleShot(5000, this, SLOT(setIsLaunching()));
 }
 
 bool LauncherItem::isStillValid()
 {
-    _desktopEntry = QSharedPointer<MDesktopEntry>(new MDesktopEntry(filePath()));
-    emit this->itemChanged();
+    // Force a reload of _desktopEntry
+    setFilePath(filePath());
     return isValid();
+}
+
+QString LauncherItem::getOriginalIconId() const
+{
+    return !_desktopEntry.isNull() ? _desktopEntry->icon() : QString();
+}
+
+void LauncherItem::setIconFilename(const QString &path)
+{
+    _customIconFilename = path;
+    _serial++;
+    emit itemChanged();
+}
+
+QString LauncherItem::iconFilename() const
+{
+    return _customIconFilename;
 }

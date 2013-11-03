@@ -3,10 +3,11 @@ system(qdbusxml2cpp screenlock/screenlock.xml -a screenlock/screenlockadaptor -c
 system(qdbusxml2cpp devicelock/devicelock.xml -a devicelock/devicelockadaptor -c DeviceLockAdaptor -l DeviceLock -i devicelock.h)
 system(qdbusxml2cpp lipstick.xml -a homeapplicationadaptor -c HomeApplicationAdaptor -l HomeApplication -i homeapplication.h)
 system(qdbusxml2cpp screenshotservice.xml -a screenshotserviceadaptor -c ScreenshotServiceAdaptor -l ScreenshotService -i screenshotservice.h)
+system(qdbusxml2cpp shutdownscreen.xml -a shutdownscreenadaptor -c ShutdownScreenAdaptor -l ShutdownScreen -i shutdownscreen.h)
 
 TEMPLATE = lib
 TARGET = lipstick-qt5
-VERSION = 0.17.6
+VERSION = 0.18.2
 
 DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x000000
 DEFINES += LIPSTICK_BUILD_LIBRARY VERSION=\\\"$$VERSION\\\"
@@ -32,6 +33,7 @@ PUBLICHEADERS += \
     lipsticksettings.h \
     components/launcheritem.h \
     components/launchermodel.h \
+    components/launchermonitor.h \
     notifications/notificationmanager.h \
     notifications/lipsticknotification.h \
     notifications/notificationlistmodel.h \
@@ -62,6 +64,7 @@ HEADERS += \
     devicelock/devicelockadaptor.h \
     devicelock/devicelock.h \
     homeapplicationadaptor.h \
+    shutdownscreenadaptor.h \
     screenshotservice.h \
     screenshotserviceadaptor.h
 
@@ -74,6 +77,7 @@ SOURCES += \
     utilities/closeeventeater.cpp \
     components/launcheritem.cpp \
     components/launchermodel.cpp \
+    components/launchermonitor.cpp \
     notifications/notificationmanager.cpp \
     notifications/notificationmanageradaptor.cpp \
     notifications/lipsticknotification.cpp \
@@ -90,6 +94,7 @@ SOURCES += \
     notifications/notificationfeedbackplayer.cpp \
     usbmodeselector.cpp \
     shutdownscreen.cpp \
+    shutdownscreenadaptor.cpp \
     connectionselector.cpp \
     lipstickapi.cpp \
     devicelock/devicelockadaptor.cpp \
@@ -100,6 +105,8 @@ SOURCES += \
 CONFIG += link_pkgconfig mobility qt warn_on depend_includepath qmake_cache target_qt
 CONFIG -= link_prl
 PKGCONFIG += mlite5 mce dbus-1 dbus-glib-1 libresourceqt5 ngf-qt5 qmsystem2-qt5 Qt5SystemInfo libsystemd-daemon
+
+LIBS += -lrt
 
 packagesExist(contentaction5) {
     message("Using contentaction to launch applications")
