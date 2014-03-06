@@ -258,6 +258,11 @@ void HomeApplication::setCompositorPath(const QString &path)
 
         component.completeCreate();
 
+        if (!qmlEngine->incubationController() && LipstickCompositor::instance()) {
+            // install default incubation controller
+            qmlEngine->setIncubationController(LipstickCompositor::instance()->incubationController());
+        }
+
         if (LipstickCompositor::instance())
             LipstickCompositor::instance()->show();
     } else {
@@ -305,6 +310,7 @@ void HomeApplication::setUpdatesEnabled(bool enabled)
             QGuiApplication::platformNativeInterface()->nativeResourceForIntegration("DisplayOff");
         } else {
             QGuiApplication::platformNativeInterface()->nativeResourceForIntegration("DisplayOn");
+            emit LipstickCompositor::instance()->displayAboutToBeOn();
             LipstickCompositor::instance()->showFullScreen();
         }
     }

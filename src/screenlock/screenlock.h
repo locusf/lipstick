@@ -75,7 +75,7 @@ public:
 
 public slots:
     //! Shows the screen lock window and calls the MCE's lock function.
-    void lockScreen();
+    void lockScreen(bool immediate = false);
 
     //! Hides the screen lock window and calls the MCE's unlock callback function.
     void unlockScreen();
@@ -107,6 +107,9 @@ private slots:
 
     //! Hides the event eater window.
     void hideEventEater();
+
+    //! Clear event eater if display is no longer dimmed
+    void handleDisplayStateChange(int displayState);
 
 signals:
     //! Emitted when the screen lock state changes

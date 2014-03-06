@@ -139,7 +139,8 @@ uint NotificationManager::Notify(const QString &appName, uint replacesId, const 
         if (replacesId == 0) {
             // Create a new notification
             LipstickNotification *notification = new LipstickNotification(appName, id, appIcon, summary, body, actions, hints, expireTimeout, this);
-            connect(notification, SIGNAL(actionInvoked(QString)), this, SLOT(invokeAction(QString)));
+            connect(notification, SIGNAL(actionInvoked(QString)), this, SLOT(invokeAction(QString)), Qt::QueuedConnection);
+            connect(notification, SIGNAL(removeRequested()), this, SLOT(removeNotificationIfUserRemovable()), Qt::QueuedConnection);
             notifications.insert(id, notification);
         } else {
             // Only replace an existing notification if it really exists
@@ -440,7 +441,8 @@ void NotificationManager::fetchData()
         QString body = notificationsQuery.value(notificationsTableBodyFieldIndex).toString();
         int expireTimeout = notificationsQuery.value(notificationsTableExpireTimeoutFieldIndex).toInt();
         LipstickNotification *notification = new LipstickNotification(appName, id, appIcon, summary, body, actions[id], hints[id], expireTimeout, this);
-        connect(notification, SIGNAL(actionInvoked(QString)), this, SLOT(invokeAction(QString)));
+        connect(notification, SIGNAL(actionInvoked(QString)), this, SLOT(invokeAction(QString)), Qt::QueuedConnection);
+        connect(notification, SIGNAL(removeRequested()), this, SLOT(removeNotificationIfUserRemovable()), Qt::QueuedConnection);
         notifications.insert(id, notification);
 
         NOTIFICATIONS_DEBUG("RESTORED:" << appName << appIcon << summary << body << actions[id] << hints[id] << expireTimeout << "->" << id);
@@ -522,6 +524,13 @@ void NotificationManager::invokeAction(const QString &action)
 
 void NotificationManager::removeNotificationIfUserRemovable(uint id)
 {
+    if (id == 0) {
+        LipstickNotification *notification = qobject_cast<LipstickNotification *>(sender());
+        if (notification != 0) {
+            id = notifications.key(notification, 0);
+        }
+    }
+
     LipstickNotification *notification = notifications[id];
     QVariant userRemovable = notification->hints().value(HINT_USER_REMOVABLE);
     if (!userRemovable.isValid() || userRemovable.toBool()) {

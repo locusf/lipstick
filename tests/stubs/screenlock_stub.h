@@ -31,7 +31,7 @@ class ScreenLockStub : public StubBase {
   virtual int tklock_close(bool silent);
   virtual void toggleScreenLockUI(bool toggle);
   virtual void toggleEventEater(bool toggle);
-  virtual void lockScreen();
+  virtual void lockScreen(bool immediate=false);
   virtual void unlockScreen();
   virtual void showScreenLock();
   virtual void showLowPowerMode();
@@ -40,6 +40,7 @@ class ScreenLockStub : public StubBase {
   virtual void hideScreenLockAndEventEater();
   virtual void showEventEater();
   virtual void hideEventEater();
+  virtual void handleDisplayStateChange(int);
   virtual bool isScreenLocked();
   virtual bool eventFilter(QObject *, QEvent *event);
 }; 
@@ -92,7 +93,9 @@ void ScreenLockStub::toggleEventEater(bool toggle) {
   stubMethodEntered("toggleEventEater",params);
 }
 
-void ScreenLockStub::lockScreen() {
+void ScreenLockStub::lockScreen(bool immediate) {
+  QList<ParameterBase*> params;
+  params.append( new Parameter<bool >(immediate));
   stubMethodEntered("lockScreen");
 }
 
@@ -126,6 +129,12 @@ void ScreenLockStub::showEventEater() {
 
 void ScreenLockStub::hideEventEater() {
   stubMethodEntered("hideEventEater");
+}
+
+void ScreenLockStub::handleDisplayStateChange(int displayState){
+    QList<ParameterBase*> params;
+    params.append( new Parameter<int >(displayState));
+    stubMethodEntered("handleDisplayStateChange", params);
 }
 
 bool ScreenLockStub::isScreenLocked() {
@@ -173,8 +182,8 @@ void ScreenLock::toggleEventEater(bool toggle) {
   gScreenLockStub->toggleEventEater(toggle);
 }
 
-void ScreenLock::lockScreen() {
-  gScreenLockStub->lockScreen();
+void ScreenLock::lockScreen(bool immediate) {
+  gScreenLockStub->lockScreen(immediate);
 }
 
 void ScreenLock::unlockScreen() {
@@ -207,6 +216,10 @@ void ScreenLock::showEventEater() {
 
 void ScreenLock::hideEventEater() {
   gScreenLockStub->hideEventEater();
+}
+
+void ScreenLock::handleDisplayStateChange(int displayState) {
+  gScreenLockStub->handleDisplayStateChange(displayState);
 }
 
 bool ScreenLock::isScreenLocked() const {

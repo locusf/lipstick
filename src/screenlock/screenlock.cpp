@@ -21,6 +21,7 @@
 #include <QCursor>
 
 #include <mce/mode-names.h>
+#include <qmdisplaystate.h>
 
 #include "homeapplication.h"
 #include "screenlock.h"
@@ -33,6 +34,12 @@ ScreenLock::ScreenLock(QObject* parent) :
     lockscreenVisible(false),
     eatEvents(false)
 {
+    // No explicit API in tklock for disabling event eater. Monitor display
+    // state changes, and remove event eater if display becomes undimmed.
+    MeeGo::QmDisplayState *displayState = new MeeGo::QmDisplayState(this);
+    connect(displayState, &MeeGo::QmDisplayState::displayStateChanged,
+            this, &ScreenLock::handleDisplayStateChange);
+
     qApp->installEventFilter(this);
 }
 
@@ -95,10 +102,10 @@ int ScreenLock::tklock_close(bool)
     return TkLockReplyOk;
 }
 
-void ScreenLock::lockScreen()
+void ScreenLock::lockScreen(bool immediate)
 {
     QDBusMessage message = QDBusMessage::createMethodCall("com.nokia.mce", "/com/nokia/mce/request", "com.nokia.mce.request", "req_tklock_mode_change");
-    message.setArguments(QVariantList() << MCE_TK_LOCKED_DELAY);
+    message.setArguments(QVariantList() << (immediate ? MCE_TK_LOCKED : MCE_TK_LOCKED_DELAY));
     QDBusConnection::systemBus().asyncCall(message);
 
     showScreenLock();
@@ -150,6 +157,16 @@ void ScreenLock::showEventEater()
 void ScreenLock::hideEventEater()
 {
     toggleEventEater(false);
+}
+
+void ScreenLock::handleDisplayStateChange(int displayState)
+{
+    MeeGo::QmDisplayState::DisplayState state = static_cast<MeeGo::QmDisplayState::DisplayState>(displayState);
+    if (state == MeeGo::QmDisplayState::Dimmed)
+        return;
+
+    // Eating an event is meaningful only when the display is dimmed
+    hideEventEater();
 }
 
 void ScreenLock::toggleScreenLockUI(bool toggle)

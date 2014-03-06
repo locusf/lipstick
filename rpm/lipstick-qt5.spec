@@ -6,16 +6,18 @@
 Name:       lipstick-qt5
 
 # >> macros
+# We need this folder, so that lipstick can monitor it. See the code
+# in src/components/launchermodel.cpp for reference.
+%define icondirectory %{_datadir}/icons/hicolor/86x86/apps
 # << macros
 
 Summary:    QML toolkit for homescreen creation
-Version:    0.18.2
+Version:    0.20.7
 Release:    1
 Group:      System/Libraries
 License:    LGPLv2.1
 URL:        http://github.com/nemomobile/lipstick
 Source0:    %{name}-%{version}.tar.bz2
-Source100:  lipstick-qt5.yaml
 Requires:   mce >= 1.12.4
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
@@ -34,11 +36,11 @@ BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(dbus-glib-1)
 BuildRequires:  pkgconfig(libresourceqt5)
 BuildRequires:  pkgconfig(ngf-qt5)
-BuildRequires:  pkgconfig(qmsystem2-qt5) >= 1.4.11
+BuildRequires:  pkgconfig(qmsystem2-qt5) >= 1.4.16
 BuildRequires:  pkgconfig(contextkit-statefs) >= 0.2.7
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:  qt5-qttools-linguist
-BuildRequires:  qt5-qtwayland-wayland_egl-devel >= 5.1.0+git7
+BuildRequires:  qt5-qtwayland-wayland_egl-devel
 BuildRequires:  doxygen
 Conflicts:   meegotouch-systemui < 1.5.7
 Obsoletes:   libnotificationsystem0
@@ -72,6 +74,15 @@ Requires:   %{name} = %{version}-%{release}
 
 %description tools
 Tools for the lipstick package.
+
+%package tools-ui
+Summary:    UI-based tools for lipstick
+License:    LGPLv2.1
+Group:      System/Libraries
+Requires:   %{name} = %{version}-%{release}
+
+%description tools-ui
+UI-based tools for the lipstick package.
 
 %package doc
 Summary:    Documentation for lipstick
@@ -111,6 +122,7 @@ make %{?_smp_mflags}
 %install
 rm -rf %{buildroot}
 # >> install pre
+mkdir -p %{buildroot}/%{icondirectory}
 # << install pre
 %qmake5_install
 
@@ -130,6 +142,7 @@ rm -rf %{buildroot}
 %{_datadir}/translations/lipstick_eng_en.qm
 %{_datadir}/lipstick/notificationcategories/*.conf
 # >> files
+%dir %{icondirectory}
 # << files
 
 %files devel
@@ -151,9 +164,14 @@ rm -rf %{buildroot}
 %defattr(-,root,root,-)
 %{_bindir}/notificationtool
 %{_bindir}/screenshottool
-%{_datadir}/applications/screenshottool.desktop
 # >> files tools
 # << files tools
+
+%files tools-ui
+%defattr(-,root,root,-)
+%{_datadir}/applications/screenshottool.desktop
+# >> files tools-ui
+# << files tools-ui
 
 %files doc
 %defattr(-,root,root,-)

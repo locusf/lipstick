@@ -118,6 +118,9 @@ signals:
     //! Sent when the volume has changed.
     void volumeChanged();
 
+    //! Sent when a volume key was pressed or a key repeat occurred.
+    void volumeKeyPressed();
+
     //! Sent when the maximum volume has changed.
     void maximumVolumeChanged();
 
@@ -161,9 +164,6 @@ private slots:
     //! Changes the current volume by the amount set in volumeChange
     void changeVolume();
 
-    //! Stops any key repeat in progress
-    void stopKeyRepeat();
-
     //! Used to capture safe volume level and reset it to safe when needed.
     void handleHighVolume(int safeLevel);
 
@@ -171,6 +171,9 @@ private slots:
     void handleLongListeningTime(int listeningTime);
 
 private:
+    //! Stops any key repeat in progress
+    void stopKeyRepeat();
+
     //! The volume control window
     HomeWindow *window;
 
@@ -191,9 +194,6 @@ private:
 
     //! Volume change executed when calling changeVolume()
     int volumeChange;
-
-    //! Timer for differentiating between a key release and a repress
-    QTimer keyReleaseTimer;
 
     //! Timer for the key repeat delay
     QTimer keyRepeatDelayTimer;

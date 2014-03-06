@@ -17,12 +17,16 @@
 #include <QSettings>
 #include <QProcess>
 #include <QTimer>
-#include <MGConfItem>
 #include <QDebug>
 #include "devicelock.h"
 #include <sys/time.h>
 #include <QDBusConnection>
+#include <QFile>
 
+namespace {
+const char * const settingsFile = "/usr/share/lipstick/devicelock/devicelock_settings.conf";
+const char * const lockingKey = "/desktop/nemo/devicelock/automatic_locking";
+}
 /* ------------------------------------------------------------------------- *
  * struct timeval helpers
  * ------------------------------------------------------------------------- */
@@ -46,7 +50,7 @@ static int tv_diff_in_s(const struct timeval *tv1, const struct timeval *tv2)
 
 DeviceLock::DeviceLock(QObject * parent) :
     QObject(parent),
-    lockingGConfItem(new MGConfItem("/desktop/nemo/devicelock/automatic_locking", this)),
+    lockingDelay(-1),
     lockTimer(new QTimer(this)),
     qmActivity(new MeeGo::QmActivity(this)),
     qmLocks(new MeeGo::QmLocks(this)),
@@ -55,16 +59,13 @@ DeviceLock::DeviceLock(QObject * parent) :
     isCallActive(false)
 {
     monoTime.tv_sec = 0;
-    connect(lockingGConfItem, SIGNAL(valueChanged()), this, SLOT(setStateAndSetupLockTimer()));
     connect(lockTimer, SIGNAL(timeout()), this, SLOT(lock()));
     connect(qmActivity, SIGNAL(activityChanged(MeeGo::QmActivity::Activity)), this, SLOT(setStateAndSetupLockTimer()));
     connect(qmLocks, SIGNAL(stateChanged(MeeGo::QmLocks::Lock,MeeGo::QmLocks::State)), this, SLOT(setStateAndSetupLockTimer()));
     connect(qmDisplayState, SIGNAL(displayStateChanged(MeeGo::QmDisplayState::DisplayState)), this, SLOT(checkDisplayState(MeeGo::QmDisplayState::DisplayState)));
-
     connect(qApp, SIGNAL(homeReady()), this, SLOT(init()));
 
     QDBusConnection::systemBus().connect(QString(), "/com/nokia/mce/signal", "com.nokia.mce.signal", "sig_call_state_ind", this, SLOT(handleCallStateChange(QString, QString)));
-
 }
 
 void DeviceLock::handleCallStateChange(const QString &state, const QString &ignored)
@@ -79,7 +80,12 @@ void DeviceLock::handleCallStateChange(const QString &state, const QString &igno
 
 void DeviceLock::init()
 {
-    setState(isSet() && lockingGConfItem->value(-1).toInt() >= 0 ? Locked : Unlocked);
+    if (QFile(settingsFile).exists() && watcher.addPath(settingsFile)) {
+        readSettings();
+        connect(&watcher, SIGNAL(fileChanged(QString)), this, SLOT(readSettings()));
+    }
+
+    setState(isSet() && lockingDelay >= 0 ? Locked : Unlocked);
 }
 
 void DeviceLock::setupLockTimer()
@@ -89,12 +95,11 @@ void DeviceLock::setupLockTimer()
         lockTimer->stop();
         monoTime.tv_sec = 0;
     } else {
-        int lockingDelay = lockingGConfItem->value(-1).toInt();
-        if (lockingDelay <= 0 || qmActivity->get() == MeeGo::QmActivity::Active) {
+        if (lockingDelay <= 0 || (qmActivity->get() == MeeGo::QmActivity::Active && qmDisplayState->get() != MeeGo::QmDisplayState::DisplayState::Off)) {
             // Locking disabled or device active: stop the timer
             lockTimer->stop();
             monoTime.tv_sec = 0;
-        } else if (!isCallActive) {
+        } else if (!isCallActive && !monoTime.tv_sec) {
             // Locking in N minutes enabled and device inactive: start the timer
             lockTimer->start(lockingDelay * 60 * 1000);
             tv_get_monotime(&monoTime);
@@ -104,7 +109,6 @@ void DeviceLock::setupLockTimer()
 
 void DeviceLock::setStateAndSetupLockTimer()
 {
-    int lockingDelay = lockingGConfItem->value(-1).toInt();
     if (lockingDelay < 0) {
         // Locking disabled: unlock
         setState(Unlocked);
@@ -114,20 +118,19 @@ void DeviceLock::setStateAndSetupLockTimer()
 
 void DeviceLock::checkDisplayState(MeeGo::QmDisplayState::DisplayState state)
 {
-    int lockingDelay = lockingGConfItem->value(-1).toInt();
     if (lockingDelay == 0 && state == MeeGo::QmDisplayState::DisplayState::Off
-            && qmLocks->getState(MeeGo::QmLocks::TouchAndKeyboard) == MeeGo::QmLocks::Locked
             && !isCallActive) {
         // Immediate locking enabled and the display is off and not in call: lock
         setState(Locked);
     } else if (state == MeeGo::QmDisplayState::DisplayState::Off) {
         setStateAndSetupLockTimer();
-    } else if (monoTime.tv_sec) {
+    } else if (monoTime.tv_sec && lockingDelay > 0) {
         struct timeval compareTime;
         tv_get_monotime(&compareTime);
         if (lockingDelay*60 < tv_diff_in_s(&compareTime, &monoTime)) {
             setState(Locked);
         }
+        setupLockTimer();
     }
 }
 
@@ -185,4 +188,13 @@ bool DeviceLock::runPlugin(const QStringList &args)
     qDebug() << process.readAllStandardOutput();
     qWarning() << process.readAllStandardError();
     return process.exitCode() == 0;
+}
+
+void DeviceLock::readSettings()
+{
+    QSettings settings(settingsFile, QSettings::IniFormat);
+    lockingDelay = settings.value(lockingKey, "-1").toInt();
+    if (deviceLockState != Undefined) {
+        setStateAndSetupLockTimer();
+    }
 }

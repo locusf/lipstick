@@ -21,6 +21,7 @@
 #include <QDesktopServices>
 #include <QtSensors/QOrientationSensor>
 #include <QClipboard>
+#include <QMimeData>
 #include "homeapplication.h"
 #include "windowmodel.h"
 #include "lipstickcompositorprocwindow.h"
@@ -31,7 +32,7 @@ LipstickCompositor *LipstickCompositor::m_instance = 0;
 
 LipstickCompositor::LipstickCompositor()
 : QWaylandCompositor(this), m_totalWindowCount(0), m_nextWindowId(1), m_homeActive(true), m_shaderEffect(0),
-  m_fullscreenSurface(0), m_directRenderingActive(false), m_topmostWindowId(0), m_screenOrientation(Qt::PrimaryOrientation), m_displayState(new MeeGo::QmDisplayState(this)), m_retainedSelection(0)
+  m_fullscreenSurface(0), m_directRenderingActive(false), m_topmostWindowId(0), m_screenOrientation(Qt::PrimaryOrientation), m_sensorOrientation(Qt::PrimaryOrientation), m_displayState(new MeeGo::QmDisplayState(this)), m_retainedSelection(0), m_compositorSettings("nemomobile", "lipstick")
 {
     setColor(Qt::black);
     setRetainedSelectionEnabled(true);
@@ -39,8 +40,7 @@ LipstickCompositor::LipstickCompositor()
     if (m_instance) qFatal("LipstickCompositor: Only one compositor instance per process is supported");
     m_instance = this;
 
-    QObject::connect(this, SIGNAL(frameSwapped()), this, SLOT(windowSwapped()));
-    QObject::connect(this, SIGNAL(beforeSynchronizing()), this, SLOT(clearUpdateRequest()));
+    QObject::connect(this, SIGNAL(afterRendering()), this, SLOT(windowSwapped()));
     connect(m_displayState, SIGNAL(displayStateChanged(MeeGo::QmDisplayState::DisplayState)), this, SLOT(reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState)));
     QObject::connect(HomeApplication::instance(), SIGNAL(aboutToDestroy()), this, SLOT(homeApplicationAboutToDestroy()));
 
@@ -120,8 +120,15 @@ void LipstickCompositor::openUrl(const QUrl &url)
 
 void LipstickCompositor::retainedSelectionReceived(QMimeData *mimeData)
 {
-    m_retainedSelection = mimeData;
-    QGuiApplication::clipboard()->setMimeData(mimeData);
+    if (!m_retainedSelection)
+        m_retainedSelection = new QMimeData;
+
+    // Make a copy to allow QClipboard to take ownership of our data
+    m_retainedSelection->clear();
+    foreach (const QString &format, mimeData->formats())
+        m_retainedSelection->setData(format, mimeData->data(format));
+
+    QGuiApplication::clipboard()->setMimeData(m_retainedSelection.data());
 }
 
 int LipstickCompositor::windowCount() const
@@ -211,7 +218,11 @@ void LipstickCompositor::surfaceDamaged(const QRect &)
     if (!isVisible()) {
         // If the compositor is not visible, do not throttle.
         // make it conditional to QT_WAYLAND_COMPOSITOR_NO_THROTTLE?
+#if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
+        sendFrameCallbacks(surfaces());
+#else
         frameFinished(0);
+#endif
     }
 }
 
@@ -225,14 +236,6 @@ void LipstickCompositor::setFullscreenSurface(QWaylandSurface *surface)
         m_fullscreenSurface->surfaceItem()->update();
 
     m_fullscreenSurface = surface;
-
-    const bool directRenderingSucceeded = setDirectRenderSurface(m_fullscreenSurface, openglContext());
-    if (surface && !directRenderingSucceeded)
-        qWarning() << Q_FUNC_INFO << "failed to set direct render surface";
-    if ((surface && directRenderingSucceeded) != m_directRenderingActive) {
-        m_directRenderingActive = surface && directRenderingSucceeded;
-        emit directRenderingActiveChanged();
-    }
 
     emit fullscreenSurfaceChanged();
 }
@@ -280,19 +283,6 @@ void LipstickCompositor::surfaceAboutToBeDestroyed(QWaylandSurface *surface)
     }
 }
 
-void LipstickCompositor::clearUpdateRequest()
-{
-    // Called from render thread
-    m_updateRequestPosted.store(0);
-}
-
-void LipstickCompositor::maybePostUpdateRequest()
-{
-    // Called from GUI thread
-    if (m_updateRequestPosted.testAndSetOrdered(0, 1))
-        qApp->postEvent(this, new QEvent(QEvent::User));
-}
-
 void LipstickCompositor::surfaceMapped()
 {
     QWaylandSurface *surface = qobject_cast<QWaylandSurface *>(sender());
@@ -303,20 +293,14 @@ void LipstickCompositor::surfaceMapped()
     QVariantMap properties = surface->windowProperties();
     QString category = properties.value("CATEGORY").toString();
 
-    if (surface->surfaceItem()) {
-        // Always cause a repaint on surface mapped
-        maybePostUpdateRequest();
+    if (surface->surfaceItem())
         return;
-    }
 
     // The surface was mapped for the first time
     int id = m_nextWindowId++;
     LipstickCompositorWindow *item = new LipstickCompositorWindow(id, category, surface, contentItem());
     item->setSize(surface->size());
     QObject::connect(item, SIGNAL(destroyed(QObject*)), this, SLOT(windowDestroyed()));
-
-    // Whenever the item is damaged, cause a full repaint
-    QObject::connect(item, SIGNAL(textureChanged()), this, SLOT(maybePostUpdateRequest()));
     m_totalWindowCount++;
     m_mappedSurfaces.insert(id, item);
 
@@ -381,7 +365,15 @@ void LipstickCompositor::surfaceLowered()
 
 void LipstickCompositor::windowSwapped()
 {
+#if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
+    if (m_fullscreenSurface) {
+        sendFrameCallbacks(QList<QWaylandSurface *>() << m_fullscreenSurface);
+    } else {
+        sendFrameCallbacks(surfaces());
+    }
+#else
     frameFinished(m_fullscreenSurface);
+#endif
 }
 
 void LipstickCompositor::windowDestroyed()
@@ -414,12 +406,8 @@ void LipstickCompositor::surfaceUnmapped(QWaylandSurface *surface)
         setFullscreenSurface(0);
 
     LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
-    if (window) {
+    if (window)
         emit windowHidden(window);
-
-        // Always schedule an update
-        maybePostUpdateRequest();
-    }
 }
 
 void LipstickCompositor::surfaceUnmapped(LipstickCompositorProcWindow *item)
@@ -453,17 +441,6 @@ void LipstickCompositor::windowRemoved(int id)
 {
     for (int ii = 0; ii < m_windowModels.count(); ++ii)
         m_windowModels.at(ii)->remItem(id);
-}
-
-bool LipstickCompositor::event(QEvent *e)
-{
-    // Update will eventually trigger a beforeSynchronizing signal,
-    // clear the m_updateRequest there (what happens after synchronizing,
-    // needs to be updated)
-    if (e->type() == QEvent::User)
-        update();
-
-    return QQuickWindow::event(e);
 }
 
 QQmlComponent *LipstickCompositor::shaderEffectComponent()
@@ -512,32 +489,39 @@ void LipstickCompositor::setScreenOrientationFromSensor()
     if (debug())
         qDebug() << "Screen orientation changed " << reading->orientation();
 
+    Qt::ScreenOrientation sensorOrientation = m_sensorOrientation;
     switch (reading->orientation()) {
         case QOrientationReading::TopUp:
-            setScreenOrientation(Qt::PortraitOrientation);
+            sensorOrientation = Qt::PortraitOrientation;
             break;
         case QOrientationReading::TopDown:
-            setScreenOrientation(Qt::InvertedPortraitOrientation);
+            sensorOrientation = Qt::InvertedPortraitOrientation;
             break;
         case QOrientationReading::LeftUp:
-            setScreenOrientation(Qt::InvertedLandscapeOrientation);
+            sensorOrientation = Qt::InvertedLandscapeOrientation;
             break;
         case QOrientationReading::RightUp:
-            setScreenOrientation(Qt::LandscapeOrientation);
+            sensorOrientation = Qt::LandscapeOrientation;
             break;
-        case QOrientationReading::Undefined:
         case QOrientationReading::FaceUp:
         case QOrientationReading::FaceDown:
-        default:
-            setScreenOrientation(Qt::PrimaryOrientation);
+            /* Keep screen orientation at previous state */
             break;
+        case QOrientationReading::Undefined:
+        default:
+            sensorOrientation = Qt::PrimaryOrientation;
+            break;
+    }
+
+    if (sensorOrientation != m_sensorOrientation) {
+        m_sensorOrientation = sensorOrientation;
+        emit sensorOrientationChanged();
     }
 }
 
 void LipstickCompositor::clipboardDataChanged()
 {
-    if (QGuiApplication::clipboard()->mimeData() != m_retainedSelection) {
-        m_retainedSelection = QGuiApplication::clipboard()->mimeData();
-        overrideSelection(const_cast<QMimeData *>(m_retainedSelection));
-    }
+    const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
+    if (mimeData && mimeData != m_retainedSelection)
+        overrideSelection(const_cast<QMimeData *>(mimeData));
 }

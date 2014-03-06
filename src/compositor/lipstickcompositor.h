@@ -21,6 +21,8 @@
 #include <QQmlParserStatus>
 #include <QWaylandCompositor>
 #include <QWaylandSurfaceItem>
+#include <QPointer>
+#include <QSettings>
 #include <qmdisplaystate.h>
 
 class WindowModel;
@@ -42,7 +44,9 @@ class LIPSTICK_EXPORT LipstickCompositor : public QQuickWindow, public QWaylandC
     Q_PROPERTY(bool directRenderingActive READ directRenderingActive NOTIFY directRenderingActiveChanged)
     Q_PROPERTY(int topmostWindowId READ topmostWindowId WRITE setTopmostWindowId NOTIFY topmostWindowIdChanged)
     Q_PROPERTY(Qt::ScreenOrientation screenOrientation READ screenOrientation WRITE setScreenOrientation NOTIFY screenOrientationChanged)
+    Q_PROPERTY(Qt::ScreenOrientation sensorOrientation READ sensorOrientation NOTIFY sensorOrientationChanged)
     Q_PROPERTY(QObject* clipboard READ clipboard CONSTANT)
+    Q_PROPERTY(QVariant orientationLock READ orientationLock NOTIFY orientationLockChanged)
 
 public:
     LipstickCompositor();
@@ -72,6 +76,10 @@ public:
     Qt::ScreenOrientation screenOrientation() const { return m_screenOrientation; }
     void setScreenOrientation(Qt::ScreenOrientation screenOrientation);
 
+    Qt::ScreenOrientation sensorOrientation() const { return m_sensorOrientation; }
+
+    QVariant orientationLock() const { return m_compositorSettings.value("Compositor/orientationLock"); }
+
     QObject *clipboard() const;
 
     bool debug() const;
@@ -80,6 +88,7 @@ public:
     Q_INVOKABLE void closeClientForWindowId(int);
     Q_INVOKABLE void clearKeyboardFocus();
     Q_INVOKABLE void setDisplayOff();
+    Q_INVOKABLE QVariant settingsValue(const QString &key, const QVariant &defaultValue = QVariant()) const { return m_compositorSettings.value("Compositor/" + key, defaultValue); }
 
     LipstickCompositorProcWindow *mapProcWindow(const QString &title, const QString &category, const QRect &);
 
@@ -102,17 +111,17 @@ signals:
     void directRenderingActiveChanged();
     void topmostWindowIdChanged();
     void screenOrientationChanged();
+    void sensorOrientationChanged();
+    void orientationLockChanged();
 
     void displayOn();
     void displayOff();
+    void displayAboutToBeOn();
 
 protected:
-    virtual bool event(QEvent *);
     virtual void surfaceAboutToBeDestroyed(QWaylandSurface *surface);
 
 private slots:
-    void clearUpdateRequest();
-    void maybePostUpdateRequest();
     void surfaceMapped();
     void surfaceUnmapped();
     void surfaceSizeChanged();
@@ -162,10 +171,11 @@ private:
     bool m_directRenderingActive;
     int m_topmostWindowId;
     Qt::ScreenOrientation m_screenOrientation;
+    Qt::ScreenOrientation m_sensorOrientation;
     MeeGo::QmDisplayState *m_displayState;
-    QAtomicInt m_updateRequestPosted;
     QOrientationSensor* m_orientationSensor;
-    const QMimeData *m_retainedSelection;
+    QPointer<QMimeData> m_retainedSelection;
+    QSettings m_compositorSettings;
 };
 
 #endif // LIPSTICKCOMPOSITOR_H
