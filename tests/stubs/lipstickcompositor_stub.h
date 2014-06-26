@@ -40,13 +40,19 @@ class LipstickCompositorStub : public StubBase {
   virtual void surfaceTitleChanged();
   virtual void surfaceRaised();
   virtual void surfaceLowered();
+#if QT_VERSION >= QT_VERSION_CHECK(5, 2, 0)
+  virtual void surfaceDamaged(const QRegion &);
+#else
   virtual void surfaceDamaged(const QRect &);
+#endif
   virtual void windowSwapped();
   virtual void windowDestroyed();
   virtual void windowPropertyChanged(const QString &);
   virtual void reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState);
   virtual void setScreenOrientationFromSensor();
   virtual void clipboardDataChanged();
+  virtual void onVisibleChanged(bool visible);
+  virtual void startFrame();
 }; 
 
 // 2. IMPLEMENT STUB
@@ -210,11 +216,19 @@ void LipstickCompositorStub::surfaceLowered() {
   stubMethodEntered("surfaceLowered");
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 2, 0)
+void LipstickCompositorStub::surfaceDamaged(const QRegion &rect) {
+    QList<ParameterBase*> params;
+    params.append( new Parameter<QRegion>(rect));
+    stubMethodEntered("surfaceDamaged",params);
+}
+#else
 void LipstickCompositorStub::surfaceDamaged(const QRect &rect) {
     QList<ParameterBase*> params;
     params.append( new Parameter<QRect>(rect));
     stubMethodEntered("surfaceDamaged",params);
 }
+#endif
 
 void LipstickCompositorStub::windowSwapped() {
   stubMethodEntered("windowSwapped");
@@ -242,6 +256,16 @@ void LipstickCompositorStub::setScreenOrientationFromSensor( ) {
 
 void LipstickCompositorStub::clipboardDataChanged() {
   stubMethodEntered("clipboardDataChanged");
+}
+
+void LipstickCompositorStub::onVisibleChanged(bool v) {
+    QList<ParameterBase*> params;
+    params.append( new Parameter<bool>(v));
+    stubMethodEntered("onVisibleChanged", params);
+}
+
+void LipstickCompositorStub::startFrame() {
+    stubMethodEntered("startFrame");
 }
 
 // 3. CREATE A STUB INSTANCE
@@ -375,9 +399,15 @@ void LipstickCompositor::surfaceLowered() {
   gLipstickCompositorStub->surfaceLowered();
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 2, 0)
+void LipstickCompositor::surfaceDamaged(const QRegion &rect) {
+  gLipstickCompositorStub->surfaceDamaged(rect);
+}
+#else
 void LipstickCompositor::surfaceDamaged(const QRect &rect) {
   gLipstickCompositorStub->surfaceDamaged(rect);
 }
+#endif
 
 void LipstickCompositor::windowSwapped() {
   gLipstickCompositorStub->windowSwapped();
@@ -404,6 +434,14 @@ void LipstickCompositor::setScreenOrientationFromSensor() {
 
 void LipstickCompositor::clipboardDataChanged() {
   gLipstickCompositorStub->clipboardDataChanged();
+}
+
+void LipstickCompositor::onVisibleChanged(bool v) {
+  gLipstickCompositorStub->onVisibleChanged(v);
+}
+
+void LipstickCompositor::startFrame() {
+    gLipstickCompositorStub->startFrame();
 }
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 2, 0)

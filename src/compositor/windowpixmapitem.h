@@ -17,6 +17,7 @@
 #define WINDOWPIXMAPITEM_H
 
 #include <QQuickItem>
+#include <QPointer>
 #include "lipstickglobal.h"
 
 class LipstickCompositor;
@@ -28,6 +29,8 @@ class LIPSTICK_EXPORT WindowPixmapItem : public QQuickItem
     Q_PROPERTY(bool opaque READ opaque WRITE setOpaque NOTIFY opaqueChanged)
     Q_PROPERTY(qreal radius READ radius WRITE setRadius NOTIFY radiusChanged)
     Q_PROPERTY(QSize windowSize READ windowSize WRITE setWindowSize NOTIFY windowSizeChanged)
+    Q_PROPERTY(qreal xScale READ xScale WRITE setXScale NOTIFY xScaleChanged)
+    Q_PROPERTY(qreal yScale READ yScale WRITE setYScale NOTIFY yScaleChanged)
 
 public:
     WindowPixmapItem();
@@ -45,6 +48,12 @@ public:
     QSize windowSize() const;
     void setWindowSize(const QSize &size);
 
+    qreal xScale() const;
+    void setXScale(qreal);
+
+    qreal yScale() const;
+    void setYScale(qreal);
+
 protected:
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *);
     virtual void geometryChanged(const QRectF &, const QRectF &);
@@ -54,15 +63,19 @@ signals:
     void opaqueChanged();
     void radiusChanged();
     void windowSizeChanged();
+    void xScaleChanged();
+    void yScaleChanged();
 
 private:
     void updateItem();
 
-    LipstickCompositorWindow *m_item;
+    QPointer<LipstickCompositorWindow> m_item;
     QQuickItem *m_shaderEffect;
     int m_id;
     bool m_opaque;
     qreal m_radius;
+    qreal m_xScale;
+    qreal m_yScale;
 };
 
 #endif // WINDOWPIXMAPITEM_H

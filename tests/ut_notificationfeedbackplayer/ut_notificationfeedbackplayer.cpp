@@ -16,7 +16,6 @@
 #include <QtTest/QtTest>
 #include "notificationmanager.h"
 #include "notificationfeedbackplayer.h"
-#include "notificationpreviewpresenter_stub.h"
 #include "lipstickcompositor_stub.h"
 #include "ngfclient_stub.h"
 #include "ut_notificationfeedbackplayer.h"
@@ -33,6 +32,7 @@ const char *NotificationManager::HINT_PREVIEW_SUMMARY = "x-nemo-preview-summary"
 const char *NotificationManager::HINT_FEEDBACK = "x-nemo-feedback";
 const char *NotificationManager::HINT_USER_REMOVABLE = "x-nemo-user-removable";
 const char *NotificationManager::HINT_DISPLAY_ON = "x-nemo-display-on";
+const char *NotificationManager::HINT_LED_DISABLED_WITHOUT_BODY_AND_SUMMARY = "x-nemo-led-disabled-without-body-and-summary";
 
 NotificationManager::NotificationManager(QObject *parent) : QObject(parent)
 {
@@ -86,15 +86,17 @@ QList<uint> NotificationManager::notificationIds() const
     return notificationManagerNotification.keys();
 }
 
-LipstickNotification *createNotification(uint id, int urgency = 0)
+LipstickNotification *createNotification(uint id, int urgency = 0, QVariant priority = QVariant())
 {
     LipstickNotification *notification = new LipstickNotification;
     QVariantHash hints;
     hints.insert(NotificationManager::HINT_FEEDBACK, "feedback");
     hints.insert(NotificationManager::HINT_URGENCY, urgency);
+    if (priority.isValid()) {
+        hints.insert(NotificationManager::HINT_PRIORITY, priority);
+    }
     notification->setHints(hints);
     notificationManagerNotification.insert(id, notification);
-    gNotificationPreviewPresenterStub->stubSetReturnValue("notification", notification);
     return notification;
 }
 
@@ -121,17 +123,15 @@ void Ut_NotificationFeedbackPlayer::initTestCase()
 
 void Ut_NotificationFeedbackPlayer::init()
 {
-    presenter = new NotificationPreviewPresenter();
-    player = new NotificationFeedbackPlayer(presenter);
+    player = new NotificationFeedbackPlayer();
 }
 
 void Ut_NotificationFeedbackPlayer::cleanup()
 {
     delete player;
-    delete presenter;
 
     gClientStub->stubReset();
-    gNotificationPreviewPresenterStub->stubReset();
+    gLipstickCompositorStub->stubSetReturnValue("surfaceForId", (QWaylandSurface *)0);
 }
 
 void Ut_NotificationFeedbackPlayer::testAddAndRemoveNotification()
@@ -192,7 +192,7 @@ void Ut_NotificationFeedbackPlayer::testUpdateNotificationIsNotPossibleAfterRest
 
     // Create a notification
     createNotification(1);
-    player = new NotificationFeedbackPlayer(presenter);
+    player = new NotificationFeedbackPlayer();
 
     // Update the notification
     player->addNotification(1);
@@ -245,6 +245,86 @@ void Ut_NotificationFeedbackPlayer::testNotificationPreviewsDisabled()
     player->addNotification(1);
 
     QCOMPARE(gClientStub->stubCallCount("play"), playCount);
+}
+
+void Ut_NotificationFeedbackPlayer::testNotificationPriority_data()
+{
+    QTest::addColumn<int>("minimumPriority");
+    QTest::addColumn<int>("urgency");
+    QTest::addColumn<QVariant>("priority");
+    QTest::addColumn<int>("playCount");
+
+    QTest::newRow("Minimum priority 50, urgency 1, priority not defined") << 50 << 1 << QVariant() << 0;
+    QTest::newRow("Minimum priority 50, urgency 1, priority 49") << 50 << 1 << QVariant(49) << 0;
+    QTest::newRow("Minimum priority 50, urgency 1, priority 50") << 50 << 1 << QVariant(50) << 1;
+    QTest::newRow("Minimum priority 50, urgency 2, priority not defined") << 50 << 2 << QVariant() << 1;
+    QTest::newRow("Minimum priority 50, urgency 2, priority 49") << 50 << 2 << QVariant(49) << 1;
+    QTest::newRow("Minimum priority 50, urgency 2, priority 50") << 50 << 2 << QVariant(50) << 1;
+}
+
+void Ut_NotificationFeedbackPlayer::testNotificationPriority()
+{
+    QFETCH(int, minimumPriority);
+    QFETCH(int, urgency);
+    QFETCH(QVariant, priority);
+    QFETCH(int, playCount);
+
+    player->setMinimumPriority(minimumPriority);
+    createNotification(1, urgency, priority);
+    player->addNotification(1);
+
+    QCOMPARE(gClientStub->stubCallCount("play"), playCount);
+}
+
+void Ut_NotificationFeedbackPlayer::testLEDDisabledWhenNoSummaryAndBody_data()
+{
+    QTest::addColumn<QVariant>("disableHint");
+    QTest::addColumn<bool>("mediaParametersDefined");
+
+    QTest::newRow("LED disabled without body and summary not defined") << QVariant() << true;
+    QTest::newRow("LED disabled without body and summary false") << QVariant(false) << false;
+    QTest::newRow("LED disabled without body and summary true") << QVariant(true) << true;
+}
+
+void Ut_NotificationFeedbackPlayer::testLEDDisabledWhenNoSummaryAndBody()
+{
+    QFETCH(QVariant, disableHint);
+    QFETCH(bool, mediaParametersDefined);
+
+    LipstickNotification *notification1 = new LipstickNotification;
+    LipstickNotification *notification2 = new LipstickNotification;
+    LipstickNotification *notification3 = new LipstickNotification;
+    QVariantHash hints;
+    hints.insert(NotificationManager::HINT_FEEDBACK, "feedback");
+    if (disableHint.isValid()) {
+        hints.insert(NotificationManager::HINT_LED_DISABLED_WITHOUT_BODY_AND_SUMMARY, disableHint);
+    }
+    notification1->setHints(hints);
+    notification2->setHints(hints);
+    notification3->setHints(hints);
+    notification2->setSummary("summary");
+    notification3->setBody("body");
+    notificationManagerNotification.insert(1, notification1);
+    notificationManagerNotification.insert(2, notification2);
+    notificationManagerNotification.insert(3, notification3);
+
+    player->addNotification(1);
+    QCOMPARE(gClientStub->stubCallCount("play"), 1);
+    QCOMPARE(gClientStub->stubLastCallTo("play").parameter<QVariantMap>(1).contains("media.leds"), mediaParametersDefined);
+    if (mediaParametersDefined) {
+        QCOMPARE(gClientStub->stubLastCallTo("play").parameter<QVariantMap>(1).value("media.leds").toBool(), false);
+        QCOMPARE(gClientStub->stubLastCallTo("play").parameter<QVariantMap>(1).value("media.audio").toBool(), true);
+        QCOMPARE(gClientStub->stubLastCallTo("play").parameter<QVariantMap>(1).value("media.vibra").toBool(), true);
+        QCOMPARE(gClientStub->stubLastCallTo("play").parameter<QVariantMap>(1).value("media.backlight").toBool(), true);
+    }
+
+    player->addNotification(2);
+    QCOMPARE(gClientStub->stubCallCount("play"), 2);
+    QCOMPARE(gClientStub->stubLastCallTo("play").parameter<QVariantMap>(1).isEmpty(), true);
+
+    player->addNotification(3);
+    QCOMPARE(gClientStub->stubCallCount("play"), 3);
+    QCOMPARE(gClientStub->stubLastCallTo("play").parameter<QVariantMap>(1).isEmpty(), true);
 }
 
 QTEST_MAIN(Ut_NotificationFeedbackPlayer)

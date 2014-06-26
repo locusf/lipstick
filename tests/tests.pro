@@ -5,6 +5,7 @@ SUBDIRS = \
           ut_closeeventeater \
           ut_devicelock \
           ut_diskspacenotifier \
+          ut_launchermodel \
           ut_lipsticksettings \
           ut_lowbatterynotifier \
           ut_lipsticknotification \
@@ -14,6 +15,7 @@ SUBDIRS = \
           ut_notificationpreviewpresenter \
           ut_screenlock \
           ut_shutdownscreen \
+          ut_thermalnotifier \
           ut_usbmodeselector \
           ut_volumecontrol \
 

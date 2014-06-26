@@ -7,7 +7,7 @@ system(qdbusxml2cpp shutdownscreen.xml -a shutdownscreenadaptor -c ShutdownScree
 
 TEMPLATE = lib
 TARGET = lipstick-qt5
-VERSION = 0.20.8
+VERSION = 0.24.4
 
 DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x000000
 DEFINES += LIPSTICK_BUILD_LIBRARY VERSION=\\\"$$VERSION\\\"
@@ -31,9 +31,14 @@ PUBLICHEADERS += \
     homewindow.h \
     lipstickglobal.h \
     lipsticksettings.h \
+    lipstickdbus.h \
+    lipstickqmlpath.h \
     components/launcheritem.h \
     components/launchermodel.h \
+    components/launcherwatchermodel.h \
     components/launchermonitor.h \
+    components/launcherdbus.h \
+    components/launcherfoldermodel.h \
     notifications/notificationmanager.h \
     notifications/lipsticknotification.h \
     notifications/notificationlistmodel.h \
@@ -61,23 +66,29 @@ HEADERS += \
     volume/volumecontrol.h \
     volume/pulseaudiocontrol.h \
     lipstickapi.h \
+    lipstickqmlpath.h \
     devicelock/devicelockadaptor.h \
     devicelock/devicelock.h \
     homeapplicationadaptor.h \
     shutdownscreenadaptor.h \
     screenshotservice.h \
-    screenshotserviceadaptor.h
+    screenshotserviceadaptor.h \
+    notifications/thermalnotifier.h
 
 SOURCES += \
     homeapplication.cpp \
     homeapplicationadaptor.cpp \
     homewindow.cpp \
     lipsticksettings.cpp \
+    lipstickqmlpath.cpp \
     utilities/qobjectlistmodel.cpp \
     utilities/closeeventeater.cpp \
     components/launcheritem.cpp \
     components/launchermodel.cpp \
+    components/launcherwatchermodel.cpp \
     components/launchermonitor.cpp \
+    components/launcherdbus.cpp \
+    components/launcherfoldermodel.cpp \
     notifications/notificationmanager.cpp \
     notifications/notificationmanageradaptor.cpp \
     notifications/lipsticknotification.cpp \
@@ -100,7 +111,8 @@ SOURCES += \
     devicelock/devicelockadaptor.cpp \
     devicelock/devicelock.cpp \
     screenshotservice.cpp \
-    screenshotserviceadaptor.cpp
+    screenshotserviceadaptor.cpp \
+    notifications/thermalnotifier.cpp
 
 CONFIG += link_pkgconfig mobility qt warn_on depend_includepath qmake_cache target_qt
 CONFIG -= link_prl

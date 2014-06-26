@@ -40,9 +40,11 @@ LipstickCompositor::LipstickCompositor()
     if (m_instance) qFatal("LipstickCompositor: Only one compositor instance per process is supported");
     m_instance = this;
 
+    connect(this, SIGNAL(visibleChanged(bool)), this, SLOT(onVisibleChanged(bool)));
     QObject::connect(this, SIGNAL(afterRendering()), this, SLOT(windowSwapped()));
     connect(m_displayState, SIGNAL(displayStateChanged(MeeGo::QmDisplayState::DisplayState)), this, SLOT(reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState)));
     QObject::connect(HomeApplication::instance(), SIGNAL(aboutToDestroy()), this, SLOT(homeApplicationAboutToDestroy()));
+    connect(this, &QQuickWindow::beforeSynchronizing, this, &LipstickCompositor::startFrame, Qt::DirectConnection);
 
     m_orientationSensor = new QOrientationSensor(this);
     QObject::connect(m_orientationSensor, SIGNAL(readingChanged()), this, SLOT(setScreenOrientationFromSensor()));
@@ -63,6 +65,9 @@ LipstickCompositor::LipstickCompositor()
 
 LipstickCompositor::~LipstickCompositor()
 {
+    // ~QWindow can a call into onVisibleChanged and QWaylandCompositor after we
+    // are destroyed, so disconnect it.
+    disconnect(this, SIGNAL(visibleChanged(bool)), this, SLOT(onVisibleChanged(bool)));
     delete m_shaderEffect;
 }
 
@@ -81,6 +86,17 @@ void LipstickCompositor::classBegin()
 {
 }
 
+void LipstickCompositor::onVisibleChanged(bool visible)
+{
+    if (!visible) {
+#if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
+        sendFrameCallbacks(surfaces());
+#else
+        frameFinished(0);
+#endif
+    }
+}
+
 void LipstickCompositor::componentComplete()
 {
     QWaylandCompositor::setOutputGeometry(QRect(0, 0, width(), height()));
@@ -96,7 +112,11 @@ void LipstickCompositor::surfaceCreated(QWaylandSurface *surface)
     connect(surface, SIGNAL(windowPropertyChanged(QString,QVariant)), this, SLOT(windowPropertyChanged(QString)));
     connect(surface, SIGNAL(raiseRequested()), this, SLOT(surfaceRaised()));
     connect(surface, SIGNAL(lowerRequested()), this, SLOT(surfaceLowered()));
+#if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
+    connect(surface, SIGNAL(damaged(QRegion)), this, SLOT(surfaceDamaged(QRegion)));
+#else
     connect(surface, SIGNAL(damaged(QRect)), this, SLOT(surfaceDamaged(QRect)));
+#endif
 }
 
 void LipstickCompositor::openUrl(WaylandClient *client, const QUrl &url)
@@ -213,7 +233,11 @@ void LipstickCompositor::setDisplayOff()
     m_displayState->set(MeeGo::QmDisplayState::Off);
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
+void LipstickCompositor::surfaceDamaged(const QRegion &)
+#else
 void LipstickCompositor::surfaceDamaged(const QRect &)
+#endif
 {
     if (!isVisible()) {
         // If the compositor is not visible, do not throttle.
@@ -363,16 +387,19 @@ void LipstickCompositor::surfaceLowered()
     }
 }
 
+void LipstickCompositor::startFrame()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
+    frameStarted();
+#endif
+}
+
 void LipstickCompositor::windowSwapped()
 {
 #if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
-    if (m_fullscreenSurface) {
-        sendFrameCallbacks(QList<QWaylandSurface *>() << m_fullscreenSurface);
-    } else {
-        sendFrameCallbacks(surfaces());
-    }
+    sendFrameCallbacks(surfaces());
 #else
-    frameFinished(m_fullscreenSurface);
+    frameFinished(0);
 #endif
 }
 
@@ -478,6 +505,7 @@ void LipstickCompositor::reactOnDisplayStateChanges(MeeGo::QmDisplayState::Displ
     if (state == MeeGo::QmDisplayState::On) {
         emit displayOn();
     } else if (state == MeeGo::QmDisplayState::Off) {
+        QCoreApplication::postEvent(this, new QTouchEvent(QEvent::TouchCancel));
         emit displayOff();
     }
 }

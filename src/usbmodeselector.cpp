@@ -21,6 +21,7 @@
 #include <qmlocks.h>
 #include "notifications/notificationmanager.h"
 #include "usbmodeselector.h"
+#include "lipstickqmlpath.h"
 
 QMap<QString, QString> USBModeSelector::errorCodeToTranslationID;
 
@@ -37,6 +38,7 @@ USBModeSelector::USBModeSelector(QObject *parent) :
 
     connect(usbMode, SIGNAL(modeChanged(MeeGo::QmUSBMode::Mode)), this, SLOT(applyUSBMode(MeeGo::QmUSBMode::Mode)));
     connect(usbMode, SIGNAL(error(const QString &)), this, SLOT(showError(const QString &)));
+    connect(usbMode, SIGNAL(supportedModesChanged(QList<MeeGo::QmUSBMode::Mode>)), this, SLOT(updateSupportedUSBModeList(QList<MeeGo::QmUSBMode::Mode>)));
 
     // Lazy initialize to improve startup time
     QTimer::singleShot(500, this, SLOT(applyCurrentUSBMode()));
@@ -44,11 +46,7 @@ USBModeSelector::USBModeSelector(QObject *parent) :
 
 void USBModeSelector::applyCurrentUSBMode()
 {
-    foreach (MeeGo::QmUSBMode::Mode supportedMode, usbMode->getSupportedModes()) {
-        supportedUSBModeList.append(supportedMode);
-    }
-    emit supportedUSBModesChanged();
-
+    updateSupportedUSBModeList(usbMode->getSupportedModes());
     applyUSBMode(usbMode->getMode());
 }
 
@@ -64,7 +62,7 @@ void USBModeSelector::setWindowVisible(bool visible)
             window->setWindowTitle("USB Mode");
             window->setContextProperty("initialSize", QGuiApplication::primaryScreen()->size());
             window->setContextProperty("usbModeSelector", this);
-            window->setSource(QUrl("qrc:/qml/USBModeSelector.qml"));
+            window->setSource(QmlPath::to("USBModeSelector.qml"));
             window->installEventFilter(new CloseEventEater(this));
         }
 
@@ -117,6 +115,7 @@ void USBModeSelector::applyUSBMode(MeeGo::QmUSBMode::Mode mode)
     case MeeGo::QmUSBMode::Developer:
     case MeeGo::QmUSBMode::Adb:
     case MeeGo::QmUSBMode::Diag:
+    case MeeGo::QmUSBMode::Host:
     case MeeGo::QmUSBMode::ConnectionSharing:
         // Hide the mode selection dialog and show a mode notification
         setWindowVisible(false);
@@ -168,6 +167,10 @@ void USBModeSelector::showNotification(MeeGo::QmUSBMode::Mode mode)
         //% "USB cable disconnected"
         body = qtTrId("qtn_usb_disconnected");
         break;
+    case MeeGo::QmUSBMode::Host:
+        //% "USB switched to host mode (OTG)"
+        body = qtTrId("qtn_usb_host_mode_active");
+        break;
     case MeeGo::QmUSBMode::ConnectionSharing:
         //% "USB tethering in use"
         body = qtTrId("qtn_usb_connection_sharing_active");
@@ -198,4 +201,13 @@ void USBModeSelector::showError(const QString &errorCode)
 void USBModeSelector::setUSBMode(int mode)
 {
     usbMode->setMode((MeeGo::QmUSBMode::Mode)mode);
+}
+
+void USBModeSelector::updateSupportedUSBModeList(const QList<MeeGo::QmUSBMode::Mode> &supportedModes)
+{
+    supportedUSBModeList.clear();
+    foreach (MeeGo::QmUSBMode::Mode supportedMode, supportedModes) {
+        supportedUSBModeList.append(supportedMode);
+    }
+    emit supportedUSBModesChanged();
 }

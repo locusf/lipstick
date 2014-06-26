@@ -21,7 +21,6 @@
 #include <mce/dbus-names.h>
 #include "lipstickcompositor.h"
 #include "notificationmanager.h"
-#include "notificationpreviewpresenter.h"
 #include "notificationfeedbackplayer.h"
 
 enum PreviewMode {
@@ -31,12 +30,11 @@ enum PreviewMode {
     AllNotificationsDisabled
 };
 
-NotificationFeedbackPlayer::NotificationFeedbackPlayer(NotificationPreviewPresenter *notificationPreviewPresenter) :
-    QObject(notificationPreviewPresenter),
+NotificationFeedbackPlayer::NotificationFeedbackPlayer(QObject *parent) :
+    QObject(parent),
     ngfClient(new Ngf::Client(this)),
-    notificationPreviewPresenter(notificationPreviewPresenter)
+    minimumPriority_(0)
 {
-    connect(notificationPreviewPresenter, SIGNAL(notificationPresented(uint)), this, SLOT(addNotification(uint)));
     connect(NotificationManager::instance(), SIGNAL(notificationRemoved(uint)), this, SLOT(removeNotification(uint)));
 
     QTimer::singleShot(0, this, SLOT(init()));
@@ -65,7 +63,14 @@ void NotificationFeedbackPlayer::addNotification(uint id)
         // Play the feedback related to the notification if any
         QString feedback = notification->hints().value(NotificationManager::HINT_FEEDBACK).toString();
         if (!feedback.isEmpty()) {
-            idToEventId.insert(notification, ngfClient->play(feedback, QMap<QString, QVariant>()));
+            QMap<QString, QVariant> properties;
+            if (notification->hints().value(NotificationManager::HINT_LED_DISABLED_WITHOUT_BODY_AND_SUMMARY, true).toBool() && notification->body().isEmpty() && notification->summary().isEmpty()) {
+                properties.insert("media.leds", false);
+                properties.insert("media.audio", true);
+                properties.insert("media.vibra", true);
+                properties.insert("media.backlight", true);
+            }
+            idToEventId.insert(notification, ngfClient->play(feedback, properties));
         }
     }
 }
@@ -91,7 +96,19 @@ bool NotificationFeedbackPlayer::isEnabled(LipstickNotification *notification)
         mode = surface->windowProperties().value("NOTIFICATION_PREVIEWS_DISABLED", uint(AllNotificationsEnabled)).toUInt();
     }
 
-    return mode == AllNotificationsEnabled ||
-           (mode == ApplicationNotificationsDisabled && notification->hints().value(NotificationManager::HINT_URGENCY).toInt() >= 2) ||
-           (mode == SystemNotificationsDisabled && notification->hints().value(NotificationManager::HINT_URGENCY).toInt() < 2);
+    int urgency = notification->hints().value(NotificationManager::HINT_URGENCY).toInt();
+    int priority = notification->hints().value(NotificationManager::HINT_PRIORITY).toInt();
+    return !(urgency < 2 && priority < minimumPriority_) && (mode == AllNotificationsEnabled || (mode == ApplicationNotificationsDisabled && urgency >= 2) || (mode == SystemNotificationsDisabled && urgency < 2));
+}
+
+int NotificationFeedbackPlayer::minimumPriority() const
+{
+    return minimumPriority_;
+}
+
+void NotificationFeedbackPlayer::setMinimumPriority(int minimumPriority)
+{
+    minimumPriority_ = minimumPriority;
+
+    emit minimumPriorityChanged();
 }

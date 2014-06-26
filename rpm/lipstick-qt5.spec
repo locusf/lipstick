@@ -12,7 +12,7 @@ Name:       lipstick-qt5
 # << macros
 
 Summary:    QML toolkit for homescreen creation
-Version:    0.20.8
+Version:    0.24.4
 Release:    1
 Group:      System/Libraries
 License:    LGPLv2.1
@@ -36,7 +36,7 @@ BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(dbus-glib-1)
 BuildRequires:  pkgconfig(libresourceqt5)
 BuildRequires:  pkgconfig(ngf-qt5)
-BuildRequires:  pkgconfig(qmsystem2-qt5) >= 1.4.16
+BuildRequires:  pkgconfig(qmsystem2-qt5) >= 1.4.17
 BuildRequires:  pkgconfig(contextkit-statefs) >= 0.2.7
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:  qt5-qttools-linguist

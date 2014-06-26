@@ -117,6 +117,7 @@ signals:
     void displayOn();
     void displayOff();
     void displayAboutToBeOn();
+    void displayAboutToBeOff();
 
 protected:
     virtual void surfaceAboutToBeDestroyed(QWaylandSurface *surface);
@@ -128,7 +129,11 @@ private slots:
     void surfaceTitleChanged();
     void surfaceRaised();
     void surfaceLowered();
+#if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
+    void surfaceDamaged(const QRegion &);
+#else
     void surfaceDamaged(const QRect &);
+#endif
     void windowSwapped();
     void windowDestroyed();
     void windowPropertyChanged(const QString &);
@@ -137,6 +142,8 @@ private slots:
     void homeApplicationAboutToDestroy();
     void setScreenOrientationFromSensor();
     void clipboardDataChanged();
+    void onVisibleChanged(bool visible);
+    void startFrame();
 
 private:
     friend class LipstickCompositorWindow;

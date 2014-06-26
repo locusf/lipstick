@@ -19,7 +19,6 @@
 #include <QObject>
 
 class NotificationFeedbackPlayer;
-class NotificationPreviewPresenter;
 
 class Ut_NotificationFeedbackPlayer : public QObject
 {
@@ -40,10 +39,13 @@ private slots:
     void testUpdateNotificationIsNotPossibleAfterRestart();
     void testNotificationPreviewsDisabled_data();
     void testNotificationPreviewsDisabled();
+    void testNotificationPriority_data();
+    void testNotificationPriority();
+    void testLEDDisabledWhenNoSummaryAndBody_data();
+    void testLEDDisabledWhenNoSummaryAndBody();
 
 private:
     NotificationFeedbackPlayer *player;
-    NotificationPreviewPresenter *presenter;
 };
 
 #endif // UT_NOTIFICATIONFEEDBACKPLAYER_H_

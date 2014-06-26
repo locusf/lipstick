@@ -28,10 +28,16 @@
 #endif
 
 #include "launcheritem.h"
+#include "launchermodel.h"
 
 LauncherItem::LauncherItem(const QString &filePath, QObject *parent)
     : QObject(parent)
     , _isLaunching(false)
+    , _isUpdating(false)
+    , _isTemporary(false)
+    , _packageName("")
+    , _updatingProgress(-1)
+    , _customTitle("")
     , _customIconFilename("")
     , _serial(0)
 {
@@ -43,13 +49,35 @@ LauncherItem::LauncherItem(const QString &filePath, QObject *parent)
     // Launching animation will be disabled if the window of the launched app shows up
 }
 
+LauncherItem::LauncherItem(const QString &packageName, const QString &label,
+        const QString &iconPath, const QString &desktopFile, QObject *parent)
+    : QObject(parent)
+    , _isLaunching(false)
+    , _isUpdating(false)
+    , _isTemporary(false)
+    , _packageName(packageName)
+    , _updatingProgress(-1)
+    , _customTitle(label)
+    , _customIconFilename(iconPath)
+    , _serial(0)
+{
+    if (!desktopFile.isEmpty()) {
+        setFilePath(desktopFile);
+    }
+}
+
 LauncherItem::~LauncherItem()
 {
 }
 
+LauncherModel::ItemType LauncherItem::type() const
+{
+    return LauncherModel::Application;
+}
+
 void LauncherItem::setFilePath(const QString &filePath)
 {
-    if (!filePath.isEmpty()) {
+    if (!filePath.isEmpty() && QFile(filePath).exists()) {
         _desktopEntry = QSharedPointer<MDesktopEntry>(new MDesktopEntry(filePath));
     } else {
         _desktopEntry.clear();
@@ -63,6 +91,16 @@ QString LauncherItem::filePath() const
     return !_desktopEntry.isNull() ? _desktopEntry->fileName() : QString();
 }
 
+QString LauncherItem::filename() const
+{
+    QString filename = filePath();
+    int sep = filename.lastIndexOf('/');
+    if (sep == -1)
+        return QString();
+
+    return filename.mid(sep+1);
+}
+
 QString LauncherItem::exec() const
 {
     return !_desktopEntry.isNull() ? _desktopEntry->exec() : QString();
@@ -70,6 +108,10 @@ QString LauncherItem::exec() const
 
 QString LauncherItem::title() const
 {
+    if (_isTemporary) {
+        return _customTitle;
+    }
+
     return !_desktopEntry.isNull() ? _desktopEntry->name() : QString();
 }
 
@@ -94,17 +136,21 @@ QStringList LauncherItem::desktopCategories() const
 
 QString LauncherItem::titleUnlocalized() const
 {
+    if (_isTemporary) {
+        return _customTitle;
+    }
+
     return !_desktopEntry.isNull() ? _desktopEntry->nameUnlocalized() : QString();
 }
 
 bool LauncherItem::shouldDisplay() const
 {
-    return !_desktopEntry.isNull() ? !_desktopEntry->noDisplay() : false;
+    return !_desktopEntry.isNull() ? !_desktopEntry->noDisplay() : _isTemporary;
 }
 
 bool LauncherItem::isValid() const
 {
-    return !_desktopEntry.isNull() ? _desktopEntry->isValid() : false;
+    return !_desktopEntry.isNull() ? _desktopEntry->isValid() : _isTemporary;
 }
 
 bool LauncherItem::isLaunching() const
@@ -120,8 +166,30 @@ void LauncherItem::setIsLaunching(bool isLaunching)
     }
 }
 
+void LauncherItem::setIsUpdating(bool isUpdating)
+{
+    if (_isUpdating != isUpdating) {
+        _isUpdating = isUpdating;
+        emit isUpdatingChanged();
+    }
+}
+
+void LauncherItem::setIsTemporary(bool isTemporary)
+{
+    if (_isTemporary != isTemporary) {
+        _isTemporary = isTemporary;
+        emit isTemporaryChanged();
+    }
+}
+
 void LauncherItem::launchApplication()
 {
+    if (_isUpdating) {
+        LauncherModel *model = static_cast<LauncherModel *>(parent());
+        model->requestLaunch(_packageName);
+        return;
+    }
+
     if (_desktopEntry.isNull())
         return;
 
@@ -159,6 +227,10 @@ void LauncherItem::launchApplication()
 
 bool LauncherItem::isStillValid()
 {
+    if (_isTemporary) {
+        return true;
+    }
+
     // Force a reload of _desktopEntry
     setFilePath(filePath());
     return isValid();
@@ -179,4 +251,28 @@ void LauncherItem::setIconFilename(const QString &path)
 QString LauncherItem::iconFilename() const
 {
     return _customIconFilename;
+}
+
+void LauncherItem::setPackageName(QString packageName)
+{
+    if (_packageName != packageName) {
+        _packageName = packageName;
+        emit packageNameChanged();
+    }
+}
+
+void LauncherItem::setUpdatingProgress(int updatingProgress)
+{
+    if (_updatingProgress != updatingProgress) {
+        _updatingProgress = updatingProgress;
+        emit updatingProgressChanged();
+    }
+}
+
+void LauncherItem::setCustomTitle(QString customTitle)
+{
+    if (_customTitle != customTitle) {
+        _customTitle = customTitle;
+        emit itemChanged();
+    }
 }
