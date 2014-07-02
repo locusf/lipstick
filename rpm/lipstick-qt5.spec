@@ -42,6 +42,7 @@ BuildRequires:  pkgconfig(systemd)
 BuildRequires:  qt5-qttools-linguist
 BuildRequires:  qt5-qtwayland-wayland_egl-devel
 BuildRequires:  doxygen
+BuildRequires:  gdb
 Conflicts:   meegotouch-systemui < 1.5.7
 Obsoletes:   libnotificationsystem0
 
