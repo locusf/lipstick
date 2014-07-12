@@ -12,13 +12,13 @@ Name:       lipstick-qt5
 # << macros
 
 Summary:    QML toolkit for homescreen creation
-Version:    0.26.3
+Version:    0.25.1
 Release:    1
 Group:      System/Libraries
 License:    LGPLv2.1
 URL:        http://github.com/nemomobile/lipstick
 Source0:    %{name}-%{version}.tar.bz2
-Requires:   mce >= 1.12.4
+Requires:   mce >= 1.31.0
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 BuildRequires:  pkgconfig(Qt5Core)
@@ -42,7 +42,6 @@ BuildRequires:  pkgconfig(systemd)
 BuildRequires:  qt5-qttools-linguist
 BuildRequires:  qt5-qtwayland-wayland_egl-devel
 BuildRequires:  doxygen
-BuildRequires:  gdb
 Conflicts:   meegotouch-systemui < 1.5.7
 Obsoletes:   libnotificationsystem0
 

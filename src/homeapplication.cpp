@@ -21,7 +21,6 @@
 #include <QTranslator>
 #include <QDebug>
 #include <QEvent>
-#include <QtGui/qpa/qplatformnativeinterface.h>
 #include <systemd/sd-daemon.h>
 
 #include "notifications/notificationmanager.h"
@@ -35,7 +34,6 @@
 #include "devicelock/devicelockadaptor.h"
 #include "lipsticksettings.h"
 #include "homeapplication.h"
-#include "homeapplicationadaptor.h"
 #include "homewindow.h"
 #include "compositor/lipstickcompositor.h"
 #include "compositor/lipstickcompositorwindow.h"
@@ -67,9 +65,7 @@ HomeApplication::HomeApplication(int &argc, char **argv, const QString &qmlPath)
     , _qmlPath(qmlPath)
     , originalSigIntHandler(signal(SIGINT, quitSignalHandler))
     , originalSigTermHandler(signal(SIGTERM, quitSignalHandler))
-    , updatesEnabled(true)
     , homeReadySent(false)
-    , onUpdatesDisabledUnfocusedWindowId(0)
 {
     setApplicationName("Lipstick");
     // TODO: autogenerate this from tags
@@ -113,9 +109,6 @@ HomeApplication::HomeApplication(int &argc, char **argv, const QString &qmlPath)
         qWarning("Unable to register D-Bus service %s: %s", LIPSTICK_DBUS_SERVICE_NAME, systemBus.lastError().message().toUtf8().constData());
     }
 
-    new HomeApplicationAdaptor(this);
-
-    registerDBusObject(systemBus, LIPSTICK_DBUS_PATH, this);
     registerDBusObject(systemBus, LIPSTICK_DBUS_SCREENLOCK_PATH, screenLock);
     registerDBusObject(systemBus, LIPSTICK_DBUS_DEVICELOCK_PATH, deviceLock);
     registerDBusObject(systemBus, LIPSTICK_DBUS_SHUTDOWN_PATH, shutdownScreen);
@@ -125,6 +118,12 @@ HomeApplication::HomeApplication(int &argc, char **argv, const QString &qmlPath)
     QDBusConnection sessionBus = QDBusConnection::sessionBus();
 
     registerDBusObject(sessionBus, LIPSTICK_DBUS_SCREENSHOT_PATH, screenshotService);
+
+    // Setting up the context and engine things
+    qmlEngine->rootContext()->setContextProperty("initialSize", QGuiApplication::primaryScreen()->size());
+    qmlEngine->rootContext()->setContextProperty("lipstickSettings", LipstickSettings::instance());
+    qmlEngine->rootContext()->setContextProperty("LipstickSettings", LipstickSettings::instance());
+    qmlEngine->rootContext()->setContextProperty("deviceLock", deviceLock);
 
     connect(this, SIGNAL(homeReady()), this, SLOT(sendStartupNotifications()));
 }
@@ -266,12 +265,6 @@ HomeWindow *HomeApplication::mainWindowInstance()
     _mainWindowInstance = new HomeWindow();
     _mainWindowInstance->setGeometry(QRect(QPoint(), QGuiApplication::primaryScreen()->size()));
     _mainWindowInstance->setWindowTitle("Home");
-
-    // Setting up the context and engine things
-    _mainWindowInstance->setContextProperty("initialSize", QGuiApplication::primaryScreen()->size());
-    _mainWindowInstance->setContextProperty("LipstickSettings", LipstickSettings::instance());
-    _mainWindowInstance->setContextProperty("deviceLock", deviceLock);
-
     QObject::connect(_mainWindowInstance->engine(), SIGNAL(quit()), qApp, SLOT(quit()));
     QObject::connect(_mainWindowInstance, SIGNAL(visibleChanged(bool)), this, SLOT(connectFrameSwappedSignal(bool)));
 
@@ -285,37 +278,6 @@ HomeWindow *HomeApplication::mainWindowInstance()
 QQmlEngine *HomeApplication::engine() const
 {
     return qmlEngine;
-}
-
-void HomeApplication::setUpdatesEnabled(bool enabled)
-{
-    if (updatesEnabled != enabled) {
-        updatesEnabled = enabled;
-
-        if (!updatesEnabled) {
-            emit LipstickCompositor::instance()->displayAboutToBeOff();
-            LipstickCompositorWindow *topmostWindow = qobject_cast<LipstickCompositorWindow *>(LipstickCompositor::instance()->windowForId(LipstickCompositor::instance()->topmostWindowId()));
-            if (topmostWindow != 0 && topmostWindow->hasFocus()) {
-                onUpdatesDisabledUnfocusedWindowId = topmostWindow->windowId();
-                LipstickCompositor::instance()->clearKeyboardFocus();
-            }
-            LipstickCompositor::instance()->hide();
-            QGuiApplication::platformNativeInterface()->nativeResourceForIntegration("DisplayOff");
-        } else {
-            QGuiApplication::platformNativeInterface()->nativeResourceForIntegration("DisplayOn");
-            emit LipstickCompositor::instance()->displayAboutToBeOn();
-            LipstickCompositor::instance()->showFullScreen();
-            if (onUpdatesDisabledUnfocusedWindowId > 0) {
-                if (!screenLock->isScreenLocked()) {
-                    LipstickCompositorWindow *topmostWindow = qobject_cast<LipstickCompositorWindow *>(LipstickCompositor::instance()->windowForId(LipstickCompositor::instance()->topmostWindowId()));
-                    if (topmostWindow != 0 && topmostWindow->windowId() == onUpdatesDisabledUnfocusedWindowId) {
-                        topmostWindow->takeFocus();
-                    }
-                }
-                onUpdatesDisabledUnfocusedWindowId = 0;
-            }
-        }
-    }
 }
 
 void HomeApplication::connectFrameSwappedSignal(bool mainWindowVisible)
